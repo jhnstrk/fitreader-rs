@@ -6,23 +6,29 @@ use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
 
 
 
-fn fit_crc_16(mut crc: u16, byte_array: &[u8]) -> u16 {
+fn fit_crc_16_u8(mut crc: u16, byte: &u8) -> u16 {
     let crc_table: [u16; 16] =  [
         0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
         0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400
-        ];
-    ;
+    ];
+
+    // compute checksum of lower four bits of byte
+    let mut tmp = crc_table[(crc & 0xF) as usize];
+    crc = (crc >> 4) & 0x0FFF;
+    crc = crc ^ tmp ^ crc_table[(byte & 0xF) as usize];
+
+    // now compute checksum of upper four bits of byte
+    tmp = crc_table[(crc & 0xF) as usize];
+    crc = (crc >> 4) & 0x0FFF;
+    crc = crc ^ tmp ^ crc_table[((byte >> 4) & 0xFu8) as usize];
+
+    return crc;
+}
+
+fn fit_crc_16(mut crc: u16, byte_array: &[u8]) -> u16 {
 
     for byte in byte_array.iter() {
-        // compute checksum of lower four bits of byte
-        let mut tmp = crc_table[(crc & 0xF) as usize];
-        crc = (crc >> 4) & 0x0FFF;
-        crc = crc ^ tmp ^ crc_table[(byte & 0xF) as usize];
-
-        // now compute checksum of upper four bits of byte
-        tmp = crc_table[(crc & 0xF) as usize];
-        crc = (crc >> 4) & 0x0FFF;
-        crc = crc ^ tmp ^ crc_table[((byte >> 4) & 0xFu8) as usize];
+        crc = fit_crc_16_u8(crc, byte);
     }
     return crc;
 }
@@ -43,10 +49,14 @@ struct FitFileHeader {
     crc: u16,
 }
 
+#[derive(Debug)]
+#[derive(Copy, Clone)]
 enum Endianness {
-    Litte, Big,
-};
+    Little, Big,
+}
 
+#[derive(Debug)]
+#[derive(Copy, Clone)]
 enum FitDataType {
     FitEnum,
     FitSint8, FitUint8, FitSint16, FitUint16, FitSint32, FitUint32,
@@ -73,7 +83,7 @@ fn int_to_fit_data_type(value: u8) -> Result<FitDataType, std::io::Error> {
         14 => Ok(FitDataType::FitSInt64),
         15 => Ok(FitDataType::FitUint64),
         16 => Ok(FitDataType::FitUint64z),
-        _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"));
+        _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"))
     }
 }
 
@@ -96,7 +106,6 @@ fn fit_data_size(data_type: FitDataType) -> Result<u8, std::io::Error> {
         FitDataType::FitSInt64 => Ok(8),
         FitDataType::FitUint64 => Ok(8),
         FitDataType::FitUint64z => Ok(8),
-        _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"));
     }
 }
 
@@ -105,7 +114,7 @@ fn fit_data_size(data_type: FitDataType) -> Result<u8, std::io::Error> {
 struct FitFieldDefinition{
     field_defn_num: u8,
     size_in_bytes: u8,
-    data_type: FitDataType,
+    data_type: Option<FitDataType>,
     count: u8,
 }
 
@@ -114,7 +123,8 @@ struct FitFieldDefinition{
 struct FitDeveloperFieldDefinition{
     field_defn_num: u8,
     size_in_bytes: u8,
-    data_type: FitDataType,
+    data_type: Option<FitDataType>,
+    dev_data_index: u8,
     count: u8,
 }
 
@@ -123,14 +133,18 @@ struct FitDeveloperFieldDefinition{
 struct FitFieldDefinitions {
     fields: Vec<FitFieldDefinition>,
     dev_fields: Vec<FitDeveloperFieldDefinition>,
+    global_message_number: u16,
+    architecture: Option<Endianness>,
 }
 
 #[derive(Default)]
 #[derive(Debug)]
 struct FitFileContext {
     bytes_read: u32,
-    architecture: Endianness,
-    field_definitions: HashMap<u16, FieldDefinitions>,
+    crc: u16,
+    architecture: Option<Endianness>,
+    field_definitions: HashMap<u8, FitFieldDefinitions>,
+    time_stamp: u32,
 }
 
 
@@ -145,17 +159,23 @@ struct FitFile {
 fn fit_read_u8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u8, std::io::Error> {
     let byte = reader.read_u8()?;
     my_file.context.bytes_read = my_file.context.bytes_read + 1;
+    my_file.context.crc = fit_crc_16_u8(my_file.context.crc, &byte);
     return Ok(byte);
 }
 
 fn fit_read_u16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u16, std::io::Error> {
 
-    let short = if my_file.context.architecture == Endianness::Little {
-        reader.read_u16::<LittleEndian>()?
-    } else {
-        reader.read_u16::<BigEndian>()?
+    let mut buf: [u8; 2] = [0; 2];
+    reader.read_exact(&mut buf)?;
+
+    let mut rdr = std::io::Cursor::new(buf);
+    let short = match my_file.context.architecture {
+        Some(Endianness::Little) => rdr.read_u16::<LittleEndian>()?,
+        Some(Endianness::Big) => rdr.read_u16::<BigEndian>()?,
+        None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 2;
+    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(short);
 }
 
@@ -207,12 +227,12 @@ fn read_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     if field_defn_num == 0xFF {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field"));
     }
-    let field_defn: FitFieldDefinition = Default::default();
+    let mut field_defn: FitFieldDefinition = Default::default();
 
     let base_type_num = base_type & 0x0F;
-    let base_type_is_endian = base_type & 0x80;
+    //let base_type_is_endian = base_type & 0x80;
 
-    field_defn.data_type = int_to_fit_data_type(base_type_num)?;
+    field_defn.data_type = Some(int_to_fit_data_type(base_type_num)?);
     field_defn.size_in_bytes = size_in_bytes;
     field_defn.field_defn_num = field_defn_num;
 
@@ -226,69 +246,78 @@ fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     let size_in_bytes = fit_read_u8(my_file, reader)?;
     let dev_data_index = fit_read_u8(my_file, reader)?;
 
-    let field_defn: FitDeveloperFieldDefinition = Default::default();
+    let mut field_defn: FitDeveloperFieldDefinition = Default::default();
     field_defn.field_defn_num = field_defn_num;
     field_defn.size_in_bytes = size_in_bytes;
     field_defn.dev_data_index = dev_data_index;
-    Ok(field_defn);
+    Ok(field_defn)
 }
 
 fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
                             local_message_type: u8, is_developer: bool) -> Result<(), std::io::Error> {
-    let reserved_byte = fit_read_u8(my_file, reader)?;
+    fit_read_u8(my_file, reader)?;  // Read and discard a reserved byte
 
     let architecture = fit_read_u8(my_file, reader)?;
     let endian:Endianness = if architecture == 1 { Endianness::Big } else { Endianness::Little };
 
-    my_file.context.architecture = endian;
+    my_file.context.architecture = Some(endian);
 
     let global_message_number = fit_read_u16(my_file, reader)?;
     let number_of_fields = fit_read_u8(my_file, reader)?;
 
-    let field_defns: FitFieldDefinitions = Default::default();
+    println!("Definition messaage: {:}, Fields: {}", global_message_number, number_of_fields);
 
-    for iField in 0..number_of_fields {
+    let mut field_defns: FitFieldDefinitions = Default::default();
+
+    for _iField in 0..number_of_fields {
         field_defns.fields.push( read_field_defn(my_file, reader)? );
+        println!("Field {}: {:?}", _iField, field_defns.fields.last().unwrap());
     }
 
-    if (is_developer) {
+    if is_developer {
         let number_of_dev_fields = fit_read_u8(my_file, reader)?;
-        for iField in 0..number_of_dev_fields {
+        for _iField in 0..number_of_dev_fields {
             field_defns.dev_fields.push( read_dev_field_defn(my_file, reader)? );
         }
     }
+    field_defns.architecture = Some(endian);
+    field_defns.global_message_number = global_message_number;
 
-    my_file.context.field_definitions.insert(global_message_number, field_defns);
-    Ok()
+    my_file.context.field_definitions.insert(local_message_type, field_defns);
+    Ok(())
 }
 
 
 fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<(), std::io::Error> {
     let record_hdr = fit_read_u8(my_file, reader)?;
-    let is_normal_header = ((record_hdr & 0x80) == 0);
+    let is_normal_header = (record_hdr & 0x80) == 0;
 
     if is_normal_header {
         let local_message_type = record_hdr & 0x0F;
         if (record_hdr & 0x40) != 0 {
             //Definition message
+            println!("Definition messaage");
             let is_developer = record_hdr & 0x20 != 0;
             read_definition_message( my_file, reader, local_message_type, is_developer);
         } else {
             // Data message
+            println!("Data messaage");
 //TODO:
         }
     } else {
         // Compressed timestamp header
+        println!("Compressed messaage");
         let local_message_type = (record_hdr >> 5) & 0x03;
-        let time_offset = record_hdr & 0x1F;
+        let time_offset = (record_hdr & 0x1F) as u32;
 
-        let new_timestamp = if time_offset >= prev_time_stamp & 0x1f {
-            prev_time_stamp & 0xFFFFFFE0 + time_offset
+        let prev_time_stamp = my_file.context.time_stamp;
+        let new_timestamp = if time_offset >= (prev_time_stamp & 0x1fu32) {
+            (prev_time_stamp & 0xFFFFFFE0) + time_offset
         } else {
-            prev_time_stamp & 0xFFFFFFE0 + time_offset + 0x20
-        }
+            (prev_time_stamp & 0xFFFFFFE0) + time_offset+ 0x20
+        };
     }
-    Ok()
+    Ok(())
 }
 
 fn read_file(path: &str) -> std::io::Result<()> {
@@ -301,6 +330,8 @@ fn read_file(path: &str) -> std::io::Result<()> {
 
     println!("Reading header from: {}", path);
     read_global_header(&mut my_file, &mut reader)?;
+
+    read_record(&mut my_file, &mut reader)?;
 
     println!("Info: size = {:?}", my_file);
 
