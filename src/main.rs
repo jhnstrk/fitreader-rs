@@ -11,7 +11,7 @@ use std::collections::HashMap;
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
 
-
+use std::borrow::Cow;
 
 fn fit_crc_16_u8(mut crc: u16, byte: &u8) -> u16 {
     let crc_table: [u16; 16] =  [
@@ -181,11 +181,20 @@ struct FitDataField {
 
 #[derive(Debug,Default)]
 struct FitDataMessage {
-    header: u8,
     global_message_num: u16,
+    is_compressed: bool,
+    time_stamp: u32,
     fields: Vec<FitDataField>,
     dev_fields: Vec<FitDataField>,
 }
+
+enum FitRecord {
+    HeaderRecord(FitFileHeader),
+    DataRecord(FitDataMessage),
+    DefinitionMessage(FitDefinitionMessage),
+}
+
+
 
 fn fit_read_u8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u8, std::io::Error> {
     let byte = reader.read_u8()?;
@@ -335,15 +344,9 @@ fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, max_len:
     let mut buf: Vec<u8> = Vec::new();
 
     // Read to terminating null. Include the null because we need it for the CRC.
-    loop {
+    for _i in 0..max_len {
         let byte = reader.read_u8()?;
         buf.push(byte);
-        if byte == 0 {
-            break;
-        }
-        if buf.len() == max_len {
-            break;
-        }
     }
 
     let the_string = String::from_utf8_lossy(&buf);
@@ -439,7 +442,8 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
     let global_message_number = fit_read_u16(my_file, reader)?;
     let number_of_fields = fit_read_u8(my_file, reader)?;
 
-    println!("Definition messaage: {:}, Fields: {}", global_message_number, number_of_fields);
+    println!("Definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
+             local_message_type, global_message_number, number_of_fields, my_file.context.bytes_read);
 
     let mut defn_mesg = FitDefinitionMessage {
         architecture: endian,
@@ -591,9 +595,9 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
 }
 
 fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
-                            local_message_type: u8) -> Result<(), std::io::Error> {
+                            local_message_type: u8) -> Result<FitDataMessage, std::io::Error> {
 
-    println!("Data message: {:}", local_message_type);
+    println!("Data message, local ID: {:} at byte {:}", local_message_type, my_file.context.bytes_read);
 
     let defn_mesg=
         match my_file.context.field_definitions.get(&local_message_type) {
@@ -639,7 +643,7 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
     println!("Data message: {:?}", mesg);
 
-    Ok(())
+    Ok( mesg )
 }
 
 
@@ -651,17 +655,15 @@ fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<()
         let local_message_type = record_hdr & 0x0F;
         if (record_hdr & 0x40) != 0 {
             //Definition message
-            println!("Definition messaage");
             let is_developer = record_hdr & 0x20 != 0;
             read_definition_message( my_file, reader, local_message_type, is_developer);
         } else {
             // Data message
-            println!("Data messaage");
             read_data_message( my_file, reader, local_message_type);
         }
     } else {
         // Compressed timestamp header
-        println!("Compressed messaage");
+        println!("Compressed message");
         let local_message_type = (record_hdr >> 5) & 0x03;
         let time_offset = (record_hdr & 0x1F) as u32;
 
@@ -687,19 +689,24 @@ fn read_file(path: &str) -> std::io::Result<()> {
     println!("Reading header from: {}", path);
     read_global_header(&mut my_file, &mut reader)?;
 
-    read_record(&mut my_file, &mut reader)?;
-    read_record(&mut my_file, &mut reader)?;
-    read_record(&mut my_file, &mut reader)?;
-    read_record(&mut my_file, &mut reader)?;
-    read_record(&mut my_file, &mut reader)?;
+    let mut num_rec = 1;  // Count the header as one record.
+    while my_file.context.bytes_read < my_file.header.data_size {
+        read_record(&mut my_file, &mut reader)?;
+        num_rec = num_rec + 1;
+    }
 
-    println!("Info: size = {:?}", my_file);
+    println!("Info: Read {:} records from {:} bytes", num_rec, my_file.context.bytes_read );
+
+    // Read directly as we don't want the crc value included in the crc computation.
+    let crc = reader.read_u16::<LittleEndian>()?;
+    println!("CRC: Computed 0x{:x}, Provided 0x{:x}", my_file.context.crc, crc);
 
     Ok(())
 }
 
 fn main() {
-    let res: std::io::Result<()> = read_file("/tmp/foo.fit");
+    let res: std::io::Result<()> = read_file("/tmp/foo.fit"); // Looks bad around byte 287037
+    //let res: std::io::Result<()> = read_file("/tmp/good.fit");
     match res {
         Ok(val) => val,
         Err(e) => println!("Error: {:?}", e),
