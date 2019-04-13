@@ -11,7 +11,9 @@ use std::collections::HashMap;
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
 
-use std::borrow::Cow;
+//use std::borrow::Cow;
+use std::sync::Arc;
+use std::any::Any;
 
 fn fit_crc_16_u8(mut crc: u16, byte: &u8) -> u16 {
     let crc_table: [u16; 16] =  [
@@ -150,8 +152,8 @@ struct FitDeveloperFieldDefinition{
 struct FitDefinitionMessage {
     architecture:Endianness,
     global_message_number: u16,
-    field_defns: Vec<FitFieldDefinition>,
-    dev_field_defns: Vec<FitDeveloperFieldDefinition>,
+    field_defns: Vec< Arc<FitFieldDefinition> >,
+    dev_field_defns: Vec< Arc<FitDeveloperFieldDefinition> >,
 }
 
 #[derive(Default)]
@@ -160,15 +162,15 @@ struct FitFileContext {
     bytes_read: u32,
     crc: u16,
     architecture: Option<Endianness>,
-    field_definitions: HashMap<u8, FitDefinitionMessage>,
-    time_stamp: u32,
+    field_definitions: HashMap<u8, Arc<FitDefinitionMessage> >,
+    timestamp: u32,
 }
 
 
 #[derive(Default)]
 #[derive(Debug)]
 struct FitFile {
-    header: FitFileHeader,
+    header: Arc<FitFileHeader>,
     context: FitFileContext,
 }
 
@@ -182,8 +184,7 @@ struct FitDataField {
 #[derive(Debug,Default)]
 struct FitDataMessage {
     global_message_num: u16,
-    is_compressed: bool,
-    time_stamp: u32,
+    timestamp: Option<u32>,    // Only set for compressed messages.
     fields: Vec<FitDataField>,
     dev_fields: Vec<FitDataField>,
 }
@@ -356,7 +357,7 @@ fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, max_len:
     return Ok(the_string.to_string());
 }
 
-fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<(), std::io::Error> {
+fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< Arc<FitFileHeader>, std::io::Error> {
 
     let mut header_buf: [u8; 12] = [0; 12];
     reader.read_exact(&mut header_buf)?;
@@ -364,61 +365,69 @@ fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Re
 
     let mut header_rdr = std::io::Cursor::new(header_buf);
 
-    my_file.header.header_size = header_rdr.read_u8().unwrap();
-    my_file.header.protocol_version = header_rdr.read_u8().unwrap();
-    my_file.header.profile_version = header_rdr.read_u16::<LittleEndian>().unwrap();
-    my_file.header.data_size = header_rdr.read_u32::<LittleEndian>().unwrap();
-    header_rdr.read_exact(&mut my_file.header.type_signature )?;
+    let mut header: FitFileHeader = Default::default();
+
+    header.header_size = header_rdr.read_u8().unwrap();
+    header.protocol_version = header_rdr.read_u8().unwrap();
+    header.profile_version = header_rdr.read_u16::<LittleEndian>().unwrap();
+    header.data_size = header_rdr.read_u32::<LittleEndian>().unwrap();
+    header_rdr.read_exact(&mut header.type_signature )?;
 
     let expected_signature : [u8;4] = ['.' as u8, 'F' as u8, 'I' as u8, 'T' as u8 ];
-    if my_file.header.type_signature != expected_signature {
+    if header.type_signature != expected_signature {
         return Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT signature"));
     }
 
     my_file.context.bytes_read = 12;
 
     // CRC is not present in older FIT formats.
-    if my_file.header.header_size >= 14 {
-        my_file.header.crc = reader.read_u16::<LittleEndian>().unwrap();
+    if header.header_size >= 14 {
+        header.crc = reader.read_u16::<LittleEndian>().unwrap();
         my_file.context.bytes_read += 2;
 
         let actual_crc = fit_crc_16(0,&header_buf);
         //println!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
-        if (my_file.header.crc != 0) && (actual_crc != my_file.header.crc) {
+        if (header.crc != 0) && (actual_crc != header.crc) {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header CRC is invalid"));
         }
     }
 
-    if my_file.header.header_size as u32 > my_file.context.bytes_read {
-        skip_bytes(reader, (my_file.header.header_size as u64 - my_file.context.bytes_read as u64) as u64)?;
+    if header.header_size as u32 > my_file.context.bytes_read {
+        skip_bytes(reader, (header.header_size as u64 - my_file.context.bytes_read as u64) as u64)?;
     }
-    Ok(())
+    Ok( Arc::new(header) )
 }
 
 fn read_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
-    -> Result<FitFieldDefinition, std::io::Error> {
+    -> Result< Arc<FitFieldDefinition>, std::io::Error> {
     let field_defn_num = fit_read_u8(my_file, reader)?;
+    if field_defn_num == 0xFF {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field: defn_num=255"));
+    }
     let size_in_bytes = fit_read_u8(my_file, reader)?;
+    if size_in_bytes == 0x0 {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field: size=0"));
+    }
     let base_type = fit_read_u8(my_file, reader)?;
 
-    if field_defn_num == 0xFF {
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field"));
-    }
     let mut field_defn: FitFieldDefinition = Default::default();
 
-    let base_type_num = base_type & 0x0F;
+    let base_type_num = base_type & 0x1F;
     //let base_type_is_endian = base_type & 0x80;
 
     field_defn.data_type = Some(int_to_fit_data_type(base_type_num)?);
+    if field_defn.data_type.is_none() {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field: data type>16"));
+    }
     field_defn.size_in_bytes = size_in_bytes;
     field_defn.field_defn_num = field_defn_num;
 
-    Ok(field_defn)
+    Ok( Arc::new(field_defn) )
 }
 
 
 fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
-    -> Result<FitDeveloperFieldDefinition, std::io::Error> {
+    -> Result< Arc<FitDeveloperFieldDefinition>, std::io::Error> {
     let field_defn_num = fit_read_u8(my_file, reader)?;
     let size_in_bytes = fit_read_u8(my_file, reader)?;
     let dev_data_index = fit_read_u8(my_file, reader)?;
@@ -427,11 +436,12 @@ fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     field_defn.field_defn_num = field_defn_num;
     field_defn.size_in_bytes = size_in_bytes;
     field_defn.dev_data_index = dev_data_index;
-    Ok(field_defn)
+    Ok(Arc::new(field_defn))
 }
 
 fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
-                            local_message_type: u8, is_developer: bool) -> Result<(), std::io::Error> {
+                            local_message_type: u8, is_developer: bool)
+    -> Result< Arc<FitDefinitionMessage>, std::io::Error> {
     let reserved0 = fit_read_u8(my_file, reader)?;  // Read and discard a reserved byte
 
     let architecture = fit_read_u8(my_file, reader)?;
@@ -463,9 +473,10 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
         }
     }
 
-    my_file.context.field_definitions.insert(local_message_type, defn_mesg);
+    let v = Arc::new(defn_mesg);
+    my_file.context.field_definitions.insert(local_message_type, v.clone());
 
-    Ok(())
+    Ok(v)
 }
 
 
@@ -595,7 +606,7 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
 }
 
 fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
-                            local_message_type: u8) -> Result<FitDataMessage, std::io::Error> {
+                            local_message_type: u8, timestamp: Option<u32>) -> Result< Arc<FitDataMessage>, std::io::Error> {
 
     println!("Data message, local ID: {:} at byte {:}", local_message_type, my_file.context.bytes_read);
 
@@ -607,8 +618,10 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
     let mut mesg = FitDataMessage{
         global_message_num: defn_mesg.global_message_number,
+        timestamp,
         ..Default::default()
     };
+
 
     for field in &defn_mesg.field_defns {
         let data_size = fit_data_size(field.data_type.unwrap())?;
@@ -618,11 +631,19 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
         let field_value_data = read_fit_field(my_file, reader, defn_mesg.architecture,
                                         field.data_type.unwrap(), count)?;
+        // If this is a timestamp, then update the file timestamp, for any compressed messages.
+        if field.field_defn_num == 253 {
+            match field_value_data.clone() {
+                FitFieldData::FitUint32(value) => my_file.context.timestamp = value[0],
+                _ => println!("Warning, bad timestamp type")
+            }
+        }
 
         let field_value = FitDataField {
             field_defn_num: field.field_defn_num,
             data: field_value_data };
         mesg.fields.push(field_value);
+
     }
 
     for field in &defn_mesg.dev_field_defns {
@@ -643,23 +664,28 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
     println!("Data message: {:?}", mesg);
 
-    Ok( mesg )
+    Ok( Arc::new(mesg) )
 }
 
 
-fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<(), std::io::Error> {
+fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< Box<Any>, std::io::Error> {
     let record_hdr = fit_read_u8(my_file, reader)?;
     let is_normal_header = (record_hdr & 0x80) == 0;
+    let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
+
+    if (reserve_bit) {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Reserved bit is set."))
+    }
 
     if is_normal_header {
         let local_message_type = record_hdr & 0x0F;
         if (record_hdr & 0x40) != 0 {
             //Definition message
             let is_developer = record_hdr & 0x20 != 0;
-            read_definition_message( my_file, reader, local_message_type, is_developer);
+            return Ok(Box::new(read_definition_message( my_file, reader, local_message_type, is_developer)));
         } else {
             // Data message
-            read_data_message( my_file, reader, local_message_type);
+            return Ok( Box::new(read_data_message( my_file, reader, local_message_type, None)) );
         }
     } else {
         // Compressed timestamp header
@@ -667,14 +693,16 @@ fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<()
         let local_message_type = (record_hdr >> 5) & 0x03;
         let time_offset = (record_hdr & 0x1F) as u32;
 
-        let prev_time_stamp = my_file.context.time_stamp;
+        let prev_time_stamp = my_file.context.timestamp;
         let new_timestamp = if time_offset >= (prev_time_stamp & 0x1fu32) {
             (prev_time_stamp & 0xFFFFFFE0) + time_offset
         } else {
             (prev_time_stamp & 0xFFFFFFE0) + time_offset+ 0x20
         };
+        // Data message
+        return Ok( Box::new(read_data_message( my_file, reader, local_message_type, Some(new_timestamp))) );
     }
-    Ok(())
+    Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field"))
 }
 
 fn read_file(path: &str) -> std::io::Result<()> {
@@ -687,11 +715,15 @@ fn read_file(path: &str) -> std::io::Result<()> {
     let mut reader = BufReader::new(file);
 
     println!("Reading header from: {}", path);
-    read_global_header(&mut my_file, &mut reader)?;
+    my_file.header = read_global_header(&mut my_file, &mut reader)?;
 
     let mut num_rec = 1;  // Count the header as one record.
     while my_file.context.bytes_read < my_file.header.data_size {
-        read_record(&mut my_file, &mut reader)?;
+        let rec = read_record(&mut my_file, &mut reader);
+        match rec {
+            Ok(_v) => {},
+            Err(e) => println!("Skipping bad rec {}", e),
+        }
         num_rec = num_rec + 1;
     }
 
