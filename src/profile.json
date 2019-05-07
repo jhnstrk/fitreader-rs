@@ -339,6 +339,7 @@
   {"field_defn_num":12, "field_name": "rear_gear"},
   {"field_defn_num":13, "field_name": "device_index"} ]
 },
+{ "mesg_num":22, "message_name": "source", "fields":[]},
 { "mesg_num":23, "message_name": "device_info", "fields":[
   {"field_defn_num":253, "field_name": "timestamp","units":"s"},
   {"field_defn_num":0, "field_name": "device_index"},
@@ -394,6 +395,7 @@
 { "mesg_num":82, "message_name": "ant_channel_id", "fields":[ ] },
 { "mesg_num":101, "message_name": "length", "fields":[ ] },
 { "mesg_num":103, "message_name": "monitoring_info", "fields":[ ] },
+{ "mesg_num":104, "message_name": "battery", "fields":[ ] },
 { "mesg_num":105, "message_name": "pad", "fields":[ ] },
 { "mesg_num":106, "message_name": "slave_device", "fields":[ ] },
 { "mesg_num":127, "message_name": "connectivity", "fields":[ ] },

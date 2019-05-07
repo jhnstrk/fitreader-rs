@@ -840,7 +840,7 @@ fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     }
 }
 
-fn print_rec(my_file: &FitFile, rec: FitRecord, pf: &ProfileData) {
+fn print_rec(rec: FitRecord, pf: &ProfileData) {
     match rec {
         FitRecord::HeaderRecord(_) => {},
         FitRecord::DataRecord(data_message) => {
@@ -917,7 +917,7 @@ fn read_file(path: &str) -> std::io::Result<()> {
     while my_file.context.bytes_read < my_file.header.data_size {
         let rec = read_record(&mut my_file, &mut reader);
         match rec {
-            Ok(v) => print_rec( &my_file, v, &p),
+            Ok(v) => print_rec(v, &p),
             Err(e) => println!("Skipping bad rec {}", e),
         }
         num_rec = num_rec + 1;
