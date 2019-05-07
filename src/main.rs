@@ -2,18 +2,24 @@
 // we need to declare in the main module, that we are using them.
 #[macro_use]
 extern crate serde_derive;
+extern crate serde_json;
+
+use serde_json::{Value, Map, Number};
 
 mod profile;
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, BufWriter};
 use std::collections::HashMap;
 
-use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
+use byteorder::{LittleEndian, BigEndian,  ReadBytesExt, WriteBytesExt};
 
 //use std::borrow::Cow;
 use std::sync::Arc;
 use std::any::Any;
+use crate::profile::{ProfileData, ProfileField, ProfileMessage};
+
+const INVALID_U32: u32 = 0xFFFFFFFF;
 
 fn fit_crc_16_u8(mut crc: u16, byte: &u8) -> u16 {
     let crc_table: [u16; 16] =  [
@@ -160,6 +166,7 @@ struct FitDefinitionMessage {
 #[derive(Debug)]
 struct FitFileContext {
     bytes_read: u32,
+    bytes_written: u32,
     crc: u16,
     architecture: Option<Endianness>,
     field_definitions: HashMap<u8, Arc<FitDefinitionMessage> >,
@@ -190,9 +197,9 @@ struct FitDataMessage {
 }
 
 enum FitRecord {
-    HeaderRecord(FitFileHeader),
-    DataRecord(FitDataMessage),
-    DefinitionMessage(FitDefinitionMessage),
+    HeaderRecord(Arc<FitFileHeader>),
+    DataRecord(Arc<FitDataMessage>),
+    DefinitionMessage(Arc<FitDefinitionMessage>),
 }
 
 
@@ -204,11 +211,23 @@ fn fit_read_u8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u8
     return Ok(byte);
 }
 
+fn fit_write_u8(my_file: &mut FitFile, writer: &mut BufWriter<File>, byte: u8) -> Result<(), std::io::Error> {
+    writer.write_u8(byte)?;
+    my_file.context.bytes_written = my_file.context.bytes_written + 1;
+    return Ok(());
+}
+
 fn fit_read_i8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i8, std::io::Error> {
     let byte = reader.read_u8()?;
     my_file.context.bytes_read = my_file.context.bytes_read + 1;
     my_file.context.crc = fit_crc_16_u8(my_file.context.crc, &byte);
     return Ok(byte as i8);
+}
+
+fn fit_write_i8(my_file: &mut FitFile, writer: &mut BufWriter<File>, byte: i8) -> Result<(), std::io::Error> {
+    writer.write_i8(byte)?;
+    my_file.context.bytes_written = my_file.context.bytes_written + 1;
+    return Ok(());
 }
 
 fn fit_read_u16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u16, std::io::Error> {
@@ -227,6 +246,16 @@ fn fit_read_u16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
     return Ok(v);
 }
 
+fn fit_write_u16(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: u16) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_u16::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_u16::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 2;
+    return Ok(());
+}
+
 fn fit_read_i16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i16, std::io::Error> {
 
     let mut buf: [u8; 2] = [0; 2];
@@ -241,6 +270,16 @@ fn fit_read_i16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
     my_file.context.bytes_read = my_file.context.bytes_read + 2;
     my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(v);
+}
+
+fn fit_write_i16(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: i16) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_i16::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_i16::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 2;
+    return Ok(());
 }
 
 fn fit_read_u32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u32, std::io::Error> {
@@ -259,6 +298,16 @@ fn fit_read_u32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
     return Ok(v);
 }
 
+fn fit_write_u32(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: u32) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_u32::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_u32::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 4;
+    return Ok(());
+}
+
 fn fit_read_i32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i32, std::io::Error> {
 
     let mut buf: [u8; 4] = [0; 4];
@@ -273,6 +322,16 @@ fn fit_read_i32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
     my_file.context.bytes_read = my_file.context.bytes_read + 4;
     my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(v);
+}
+
+fn fit_write_i32(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: i32) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_i32::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_i32::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 4;
+    return Ok(());
 }
 
 fn fit_read_u64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u64, std::io::Error> {
@@ -291,6 +350,17 @@ fn fit_read_u64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
     return Ok(v);
 }
 
+fn fit_write_u64(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: u64) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_u64::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_u64::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 8;
+    return Ok(());
+}
+
+
 fn fit_read_i64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i64, std::io::Error> {
 
     let mut buf: [u8; 8] = [0; 8];
@@ -305,6 +375,16 @@ fn fit_read_i64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
     my_file.context.bytes_read = my_file.context.bytes_read + 8;
     my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(v);
+}
+
+fn fit_write_i64(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: i64) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_i64::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_i64::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 8;
+    return Ok(());
 }
 
 fn fit_read_f32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f32, std::io::Error> {
@@ -323,6 +403,16 @@ fn fit_read_f32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f
     return Ok(v);
 }
 
+fn fit_write_f32(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: f32) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_f32::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_f32::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 4;
+    return Ok(());
+}
+
 fn fit_read_f64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f64, std::io::Error> {
 
     let mut buf: [u8; 8] = [0; 8];
@@ -339,13 +429,24 @@ fn fit_read_f64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f
     return Ok(v);
 }
 
+fn fit_write_f64(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: f64) -> Result<(), std::io::Error> {
+    match my_file.context.architecture {
+        Some(Endianness::Little) => writer.write_f64::<LittleEndian>(v)?,
+        Some(Endianness::Big) => writer.write_f64::<BigEndian>(v)?,
+        None =>  return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
+    };
+    my_file.context.bytes_written = my_file.context.bytes_written + 8;
+    return Ok(());
+}
+
+
 // From UTF-8 encoded binary string, null-terminated.
-fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, max_len: usize) -> Result<String, std::io::Error> {
+fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, len: usize) -> Result<String, std::io::Error> {
 
     let mut buf: Vec<u8> = Vec::new();
 
-    // Read to terminating null. Include the null because we need it for the CRC.
-    for _i in 0..max_len {
+    // Read bytes
+    for _i in 0..len {
         let byte = reader.read_u8()?;
         buf.push(byte);
     }
@@ -355,6 +456,22 @@ fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, max_len:
     my_file.context.bytes_read = my_file.context.bytes_read + buf.len() as u32;
     my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(the_string.to_string());
+}
+fn fit_write_string(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: &String, len: usize) -> Result<(), std::io::Error> {
+    let vbytes = v.as_bytes();
+    if vbytes.len() >= len {
+        return Err( std::io::Error::new(std::io::ErrorKind::Other, "String too long"));
+    }
+    // Write bytes
+    for _i in 0..vbytes.len() {
+        writer.write_u8( vbytes[_i])?;
+    }
+    // zero terminate and pad.
+    for _i in vbytes.len()..len {
+        writer.write_u8( 0)?;
+    }
+    my_file.context.bytes_written = my_file.context.bytes_written + (len as u32);
+    return Ok(());
 }
 
 fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< Arc<FitFileHeader>, std::io::Error> {
@@ -442,7 +559,7 @@ fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
 fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
                             local_message_type: u8, is_developer: bool)
     -> Result< Arc<FitDefinitionMessage>, std::io::Error> {
-    let reserved0 = fit_read_u8(my_file, reader)?;  // Read and discard a reserved byte
+    let _reserved0 = fit_read_u8(my_file, reader)?;  // Read and discard a reserved byte
 
     let architecture = fit_read_u8(my_file, reader)?;
     let endian:Endianness = if architecture == 1 { Endianness::Big } else { Endianness::Little };
@@ -461,14 +578,14 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
         ..Default::default()
     };
 
-    for _iField in 0..number_of_fields {
+    for _ifield in 0..number_of_fields {
         defn_mesg.field_defns.push( read_field_defn(my_file, reader)? );
-        println!("Field {}: {:?}", _iField, defn_mesg.field_defns.last().unwrap());
+        println!("Field {}: {:?}", _ifield, defn_mesg.field_defns.last().unwrap());
     }
 
     if is_developer {
         let number_of_dev_fields = fit_read_u8(my_file, reader)?;
-        for _iField in 0..number_of_dev_fields {
+        for _ifield in 0..number_of_dev_fields {
             defn_mesg.dev_field_defns.push( read_dev_field_defn(my_file, reader)? );
         }
     }
@@ -481,56 +598,56 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
 
 fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
-    architecture: Endianness, data_type: FitDataType, count: u8)
+                   data_type: FitDataType, count: u8)
     -> Result< FitFieldData, std::io::Error >
 {
     //reader.read_u16_into::<NativeEndian>(&mut buffer[..])?;
     match data_type {
         FitDataType::FitEnum => {
             let mut v: Vec<u8> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u8(my_file, reader)?);
             }
             Ok(FitFieldData::FitEnum(v))
         },
         FitDataType::FitSint8 => {
             let mut v: Vec<i8> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_i8(my_file, reader)?);
             }
             Ok(FitFieldData::FitSint8(v))
         },
         FitDataType::FitUint8 => {
             let mut v: Vec<u8> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u8(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint8(v))
         },
         FitDataType::FitSint16 => {
             let mut v: Vec<i16> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_i16(my_file, reader)?);
             }
             Ok(FitFieldData::FitSint16(v))
         },
         FitDataType::FitUint16 => {
             let mut v: Vec<u16> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u16(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint16(v))
         },
         FitDataType::FitSint32 => {
             let mut v: Vec<i32> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_i32(my_file, reader)?);
             }
             Ok(FitFieldData::FitSint32(v))
         },
         FitDataType::FitUint32 => {
             let mut v: Vec<u32> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u32(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint32(v))
@@ -541,63 +658,63 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
         },
         FitDataType::FitF32 => {
             let mut v: Vec<f32> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_f32(my_file, reader)?);
             }
             Ok(FitFieldData::FitF32(v))
         },
         FitDataType::FitF64 => {
             let mut v: Vec<f64> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_f64(my_file, reader)?);
             }
             Ok(FitFieldData::FitF64(v))
         },
         FitDataType::FitU8z => {
             let mut v: Vec<u8> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u8(my_file, reader)?);
             }
             Ok(FitFieldData::FitU8z(v))
         },
         FitDataType::FitU16z => {
             let mut v: Vec<u16> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u16(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint16(v))
         },
         FitDataType::FitU32z => {
             let mut v: Vec<u32> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u32(my_file, reader)?);
             }
             Ok(FitFieldData::FitU32z(v))
         },
         FitDataType::FitByte => {
             let mut v: Vec<u8> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u8(my_file, reader)?);
             }
             Ok(FitFieldData::FitByte(v))
         },
         FitDataType::FitSInt64 => {
             let mut v: Vec<i64> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_i64(my_file, reader)?);
             }
             Ok(FitFieldData::FitSInt64(v))
         },
         FitDataType::FitUint64 => {
             let mut v: Vec<u64> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u64(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint64(v))
         },
         FitDataType::FitUint64z => {
             let mut v: Vec<u64> = Vec::new();
-            for i in 0..count {
+            for _i in 0..count {
                 v.push(fit_read_u64(my_file, reader)?);
             }
             Ok(FitFieldData::FitUint64z(v))
@@ -629,7 +746,9 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
             0 => field.size_in_bytes,
             _ => field.size_in_bytes / data_size };
 
-        let field_value_data = read_fit_field(my_file, reader, defn_mesg.architecture,
+        my_file.context.architecture = Some(defn_mesg.architecture);
+
+        let field_value_data = read_fit_field(my_file, reader,
                                         field.data_type.unwrap(), count)?;
         // If this is a timestamp, then update the file timestamp, for any compressed messages.
         if field.field_defn_num == 253 {
@@ -646,13 +765,15 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
     }
 
+    my_file.context.architecture = Some(defn_mesg.architecture);
+
     for field in &defn_mesg.dev_field_defns {
         let data_size = fit_data_size(field.data_type.unwrap())?;
         let count:u8 = match data_size {
             0 => field.size_in_bytes,
             _ => field.size_in_bytes / data_size };
 
-        let field_value_data = read_fit_field(my_file, reader, defn_mesg.architecture,
+        let field_value_data = read_fit_field(my_file, reader,
                                               field.data_type.unwrap(), count)?;
 
         let field_value = FitDataField {
@@ -668,12 +789,12 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 }
 
 
-fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< Box<Any>, std::io::Error> {
+fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< FitRecord, std::io::Error> {
     let record_hdr = fit_read_u8(my_file, reader)?;
     let is_normal_header = (record_hdr & 0x80) == 0;
     let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
 
-    if (reserve_bit) {
+    if reserve_bit {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Reserved bit is set."))
     }
 
@@ -682,10 +803,12 @@ fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< B
         if (record_hdr & 0x40) != 0 {
             //Definition message
             let is_developer = record_hdr & 0x20 != 0;
-            return Ok(Box::new(read_definition_message( my_file, reader, local_message_type, is_developer)));
+            return Ok(FitRecord::DefinitionMessage(
+                read_definition_message( my_file, reader, local_message_type, is_developer)?));
         } else {
             // Data message
-            return Ok( Box::new(read_data_message( my_file, reader, local_message_type, None)) );
+            return Ok(FitRecord::DataRecord(
+                read_data_message( my_file, reader, local_message_type, None)?));
         }
     } else {
         // Compressed timestamp header
@@ -700,14 +823,87 @@ fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< B
             (prev_time_stamp & 0xFFFFFFE0) + time_offset+ 0x20
         };
         // Data message
-        return Ok( Box::new(read_data_message( my_file, reader, local_message_type, Some(new_timestamp))) );
+        return Ok(FitRecord::DataRecord(
+            read_data_message( my_file, reader, local_message_type, Some(new_timestamp))?) );
     }
-    Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field"))
+}
+
+fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
+    where Value: std::convert::From<T> + std::convert::From< Vec<T> >
+{
+    if x.is_empty() {
+        return Value::Null;
+    } else if x.len() == 1 {
+        return Value::from(x[0].clone() );
+    } else {
+        return (x.clone()).into();
+    }
+}
+
+fn print_rec(my_file: &FitFile, rec: FitRecord, pf: &ProfileData) {
+    match rec {
+        FitRecord::HeaderRecord(_) => {},
+        FitRecord::DataRecord(data_message) => {
+
+            let mut map = Map::new();
+
+            if !data_message.timestamp.is_none() {
+                let value = data_message.timestamp.unwrap();
+                if value != INVALID_U32 {
+                    map.insert(String::from("timestamp"), Value::from(value));
+                }
+            }
+            let message = pf.get_message(data_message.global_message_num);
+            let mut field_name: String;
+            for ifield in &data_message.fields{
+                let mut field_desc = Option::None;
+                if message.is_some() {
+                    field_desc = message.unwrap().find_field(ifield.field_defn_num);
+                }
+                if field_desc.is_some() {
+                    field_name = field_desc.unwrap().field_name.clone();
+                } else {
+                    let field_string = format!("Field{}", ifield.field_defn_num);
+                    field_name = field_string;
+                }
+                let mut value = Value::Null;
+                match &ifield.data {
+                    FitFieldData::FitEnum(x) => value = handle_fit_value(x),
+                    FitFieldData::FitSint8(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitUint8(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitSint16(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitUint16(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitSint32(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitUint32(x) => value = handle_fit_value(x),
+                    FitFieldData::FitString(x) => {
+                        value = Value::from(x.as_str());
+                    },
+                    FitFieldData::FitF32(x) => value = handle_fit_value(x),
+                    FitFieldData::FitF64(x) => value = handle_fit_value(x),
+                    FitFieldData::FitU8z(x) => value = handle_fit_value(x),
+                    FitFieldData::FitU16z(x) => value = handle_fit_value(x),
+                    FitFieldData::FitU32z(x) => value = handle_fit_value(x),
+                    FitFieldData::FitByte(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitSInt64(x) => value = handle_fit_value(x),
+                    FitFieldData::FitUint64(x)  => value = handle_fit_value(x),
+                    FitFieldData::FitUint64z(x)  => value = handle_fit_value(x),
+                }
+                map.insert(field_name.to_string(), value);
+            }
+            let message_name = if message.is_some() {
+                message.unwrap().message_name.clone()
+            } else {
+                format!("Message_{}", data_message.global_message_num)
+            };
+            println!("{} {}",message_name,Value::Object(map));
+        },
+        FitRecord::DefinitionMessage(_) => {},
+    }
 }
 
 fn read_file(path: &str) -> std::io::Result<()> {
     let mut my_file: FitFile = Default::default();
-    let p = profile::build_profile();
+    let p = profile::build_profile()?;
 
     println!("Opening file: {}", path);
     let file = File::open(path)?;
@@ -721,7 +917,7 @@ fn read_file(path: &str) -> std::io::Result<()> {
     while my_file.context.bytes_read < my_file.header.data_size {
         let rec = read_record(&mut my_file, &mut reader);
         match rec {
-            Ok(_v) => {},
+            Ok(v) => print_rec( &my_file, v, &p),
             Err(e) => println!("Skipping bad rec {}", e),
         }
         num_rec = num_rec + 1;

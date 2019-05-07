@@ -6,19 +6,19 @@ use serde::{Deserialize};
 
 #[derive(Deserialize)]
 #[derive(Clone, Debug, Default)]
-struct ProfileField {
-    field_defn_num:u8,
-    field_name: String,
-    scale: Option<f64>,
-    offset: Option<f64>,
-    units: Option<String>,
+pub struct ProfileField {
+    pub field_defn_num:u8,
+    pub field_name: String,
+    pub scale: Option<f64>,
+    pub offset: Option<f64>,
+    pub units: Option<String>,
 }
 
 #[derive(Deserialize)]
 #[derive(Clone, Debug, Default)]
-struct ProfileMessage {
-    mesg_num: u16,
-    message_name: String,
+pub struct ProfileMessage {
+    pub mesg_num: u16,
+    pub message_name: String,
     fields: Vec<ProfileField>,
 }
 
@@ -41,12 +41,14 @@ pub fn build_profile() -> Result<ProfileData> {
     Ok( ProfileData { message_map: hmap } )
 }
 
-trait QueryProfile {
-    fn get_message(&self, message_num: u16) -> Option<&ProfileMessage> ;
+impl ProfileMessage {
+    pub fn find_field(&self, field_defn_num: u8) -> Option<&ProfileField> {
+        self.fields.iter().find( | &x| x.field_defn_num == field_defn_num)
+    }
 }
 
-impl QueryProfile for ProfileData {
-    fn get_message(&self, message_num: u16) -> Option<&ProfileMessage> {
+impl ProfileData {
+    pub fn get_message(&self, message_num: u16) -> Option<&ProfileMessage> {
         self.message_map.get(&message_num)
     }
 }
