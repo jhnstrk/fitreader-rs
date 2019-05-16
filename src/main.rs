@@ -4,20 +4,20 @@
 extern crate serde_derive;
 extern crate serde_json;
 
-use serde_json::{Value, Map, Number};
+use serde_json::{Value, Map};
 
 mod profile;
 
-use std::fs::File;
-use std::io::{BufReader, Read, BufWriter};
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, Read, BufWriter, Write, Seek};
 use std::collections::HashMap;
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt, WriteBytesExt};
 
 //use std::borrow::Cow;
 use std::sync::Arc;
-use std::any::Any;
-use crate::profile::{ProfileData, ProfileField, ProfileMessage};
+use crate::profile::{ProfileData};
+use core::borrow::{BorrowMut};
 
 const INVALID_U32: u32 = 0xFFFFFFFF;
 
@@ -53,7 +53,7 @@ fn skip_bytes(reader: &mut BufReader<File>, count: u64) -> Result<u64, std::io::
     return std::io::copy(&mut reader.by_ref().take(count), &mut std::io::sink());
 }
 
-#[derive(Default)]
+#[derive(Copy, Clone, Default)]
 #[derive(Debug)]
 struct FitFileHeader {
     header_size: u8,
@@ -89,8 +89,8 @@ enum FitFieldData {
     FitEnum(Vec<u8>),
     FitSint8(Vec<i8>), FitUint8(Vec<u8>), FitSint16(Vec<i16>), FitUint16(Vec<u16>),
     FitSint32(Vec<i32>), FitUint32(Vec<u32>),
-    FitString(String), FitF32(Vec<f32>), FitF64(Vec<f64>), FitU8z(Vec<u8>),
-    FitU16z(Vec<i16>), FitU32z(Vec<u32>), FitByte(Vec<u8>),
+    FitString(String,u8), FitF32(Vec<f32>), FitF64(Vec<f64>), FitU8z(Vec<u8>),
+    FitU16z(Vec<u16>), FitU32z(Vec<u32>), FitByte(Vec<u8>),
     FitSInt64(Vec<i64>), FitUint64(Vec<u64>), FitUint64z(Vec<u64>),
 }
 
@@ -116,6 +116,30 @@ fn int_to_fit_data_type(value: u8) -> Result<FitDataType, std::io::Error> {
         _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"))
     }
 }
+
+fn fit_data_type_to_int(value: &FitDataType) -> Result<u8, std::io::Error> {
+    match value {
+        FitDataType::FitEnum => Ok(0),
+        FitDataType::FitSint8 => Ok(1),
+        FitDataType::FitUint8 => Ok(2),
+        FitDataType::FitSint16 => Ok(3),
+        FitDataType::FitUint16 => Ok(4),
+        FitDataType::FitSint32 => Ok(5),
+        FitDataType::FitUint32 => Ok(6),
+        FitDataType::FitString => Ok(7),
+        FitDataType::FitF32 => Ok(8),
+        FitDataType::FitF64 => Ok(9),
+        FitDataType::FitU8z => Ok(10),
+        FitDataType::FitU16z => Ok(11),
+        FitDataType::FitU32z => Ok(12),
+        FitDataType::FitByte => Ok(13),
+        FitDataType::FitSInt64 => Ok(14),
+        FitDataType::FitUint64 => Ok(15),
+        FitDataType::FitUint64z => Ok(16),
+        //unreachable _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type")),
+    }
+}
+
 
 fn fit_data_size(data_type: FitDataType) -> Result<u8, std::io::Error> {
     match data_type {
@@ -158,6 +182,7 @@ struct FitDeveloperFieldDefinition{
 struct FitDefinitionMessage {
     architecture:Endianness,
     global_message_number: u16,
+    local_message_type: u8,
     field_defns: Vec< Arc<FitFieldDefinition> >,
     dev_field_defns: Vec< Arc<FitDeveloperFieldDefinition> >,
 }
@@ -191,6 +216,7 @@ struct FitDataField {
 #[derive(Debug,Default)]
 struct FitDataMessage {
     global_message_num: u16,
+    local_message_type: u8,
     timestamp: Option<u32>,    // Only set for compressed messages.
     fields: Vec<FitDataField>,
     dev_fields: Vec<FitDataField>,
@@ -441,10 +467,10 @@ fn fit_write_f64(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: f64) ->
 
 
 // From UTF-8 encoded binary string, null-terminated.
-fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, len: usize) -> Result<String, std::io::Error> {
+fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, width: &u8) -> Result<String, std::io::Error> {
 
     let mut buf: Vec<u8> = Vec::new();
-
+    let len = *width as usize;
     // Read bytes
     for _i in 0..len {
         let byte = reader.read_u8()?;
@@ -457,20 +483,23 @@ fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, len: usi
     my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
     return Ok(the_string.to_string());
 }
-fn fit_write_string(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: &String, len: usize) -> Result<(), std::io::Error> {
+fn fit_write_string(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: &str, width: &u8) -> Result<(), std::io::Error> {
     let vbytes = v.as_bytes();
-    if vbytes.len() >= len {
-        return Err( std::io::Error::new(std::io::ErrorKind::Other, "String too long"));
+    let sz = *width as usize;
+    let mut string_bytes = vbytes.len();
+    if string_bytes > sz {
+        println!("Warning: String is longer than field width");
+        string_bytes = sz;
     }
     // Write bytes
-    for _i in 0..vbytes.len() {
+    for _i in 0..string_bytes {
         writer.write_u8( vbytes[_i])?;
     }
     // zero terminate and pad.
-    for _i in vbytes.len()..len {
+    for _i in string_bytes..sz {
         writer.write_u8( 0)?;
     }
-    my_file.context.bytes_written = my_file.context.bytes_written + (len as u32);
+    my_file.context.bytes_written = my_file.context.bytes_written + (sz as u32);
     return Ok(());
 }
 
@@ -515,6 +544,40 @@ fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Re
     Ok( Arc::new(header) )
 }
 
+fn write_global_header(my_file: &mut FitFile, writer: &mut BufWriter<File>, header: &FitFileHeader)
+    -> Result< (), std::io::Error>
+{
+    let mut header_buf: [u8; 12] = [0; 12];
+    {
+        let mut header_writer = vec![];
+
+        header_writer.write_u8(header.header_size)?;
+        header_writer.write_u8(header.protocol_version)?;
+        header_writer.write_u16::<LittleEndian>(header.profile_version)?;
+        header_writer.write_u32::<LittleEndian>(header.data_size)?;
+
+        let signature: [u8; 4] = ['.' as u8, 'F' as u8, 'I' as u8, 'T' as u8];
+        header_writer.write_all(&signature)?;
+
+        header_buf.copy_from_slice(header_writer.as_slice());
+    }
+    writer.write_all(&header_buf)?;
+
+    my_file.context.bytes_written = 12;
+
+    // CRC is not present in older FIT formats.
+    if header.header_size >= 14 {
+        let crc = fit_crc_16(0,&header_buf);
+        writer.write_u16::<LittleEndian>(crc)?;
+        my_file.context.bytes_written += 2;
+    }
+
+    if header.header_size as u32 > 14 {
+        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header size is invalid"));
+    }
+    Ok( () )
+}
+
 fn read_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     -> Result< Arc<FitFieldDefinition>, std::io::Error> {
     let field_defn_num = fit_read_u8(my_file, reader)?;
@@ -542,6 +605,20 @@ fn read_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     Ok( Arc::new(field_defn) )
 }
 
+fn write_field_defn( my_file: &mut FitFile, writer: &mut BufWriter<File>, field_defn: &FitFieldDefinition )
+                    -> Result< (), std::io::Error>
+{
+    let base_type_num = fit_data_type_to_int(&field_defn.data_type.unwrap() )?;
+    let base_type_is_endian = fit_data_size( field_defn.data_type.unwrap() )? > 1;
+    let base_type = base_type_num | ( if base_type_is_endian {0x80} else {0x00} );
+
+    fit_write_u8(my_file, writer, field_defn.field_defn_num)?;
+    fit_write_u8(my_file, writer, field_defn.size_in_bytes)?;
+    fit_write_u8(my_file, writer, base_type)?;
+
+    Ok( () )
+}
+
 
 fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     -> Result< Arc<FitDeveloperFieldDefinition>, std::io::Error> {
@@ -556,9 +633,18 @@ fn read_dev_field_defn( my_file: &mut FitFile, reader: &mut BufReader<File>)
     Ok(Arc::new(field_defn))
 }
 
+fn write_dev_field_defn( my_file: &mut FitFile, writer: &mut BufWriter<File>, field_defn: &FitDeveloperFieldDefinition )
+                     -> Result< (), std::io::Error>
+{
+    fit_write_u8(my_file, writer, field_defn.field_defn_num)?;
+    fit_write_u8(my_file, writer, field_defn.size_in_bytes)?;
+    fit_write_u8(my_file, writer, field_defn.dev_data_index)?;
+    Ok( () )
+}
+
 fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
                             local_message_type: u8, is_developer: bool)
-    -> Result< Arc<FitDefinitionMessage>, std::io::Error> {
+                            -> Result< Arc<FitDefinitionMessage>, std::io::Error> {
     let _reserved0 = fit_read_u8(my_file, reader)?;  // Read and discard a reserved byte
 
     let architecture = fit_read_u8(my_file, reader)?;
@@ -575,6 +661,7 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
     let mut defn_mesg = FitDefinitionMessage {
         architecture: endian,
         global_message_number,
+        local_message_type,
         ..Default::default()
     };
 
@@ -596,6 +683,53 @@ fn read_definition_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
     Ok(v)
 }
 
+fn write_definition_message( my_file: &mut FitFile, writer: &mut BufWriter<File>, defn_mesg: &FitDefinitionMessage)
+                            -> Result< (), std::io::Error>
+{
+    let is_developer = !defn_mesg.dev_field_defns.is_empty();
+    assert!(defn_mesg.local_message_type <= 0x0F);
+
+    let record_hdr = defn_mesg.local_message_type |
+        (if is_developer {0x20} else {0x0}) |
+        0x40; // Definition message
+
+    fit_write_u8(my_file, writer, record_hdr)?;  // Write header byte
+    fit_write_u8(my_file, writer, 0u8)?;  // Write a reserved byte
+
+    match my_file.context.architecture {
+        Some(x) => {
+            match x {
+                Endianness::Big => fit_write_u8(my_file, writer, 1u8)?,
+                Endianness::Little => fit_write_u8(my_file, writer, 0u8)?,
+            };
+        }
+
+        None => return Err(std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set")),
+    };
+
+    fit_write_u16(my_file, writer, defn_mesg.global_message_number)?;
+    fit_write_u8(my_file, writer, defn_mesg.field_defns.len() as u8)?;
+
+    println!("Writing definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
+             defn_mesg.local_message_type, defn_mesg.global_message_number,
+             defn_mesg.field_defns.len(), my_file.context.bytes_written);
+
+    for field in &defn_mesg.field_defns {
+        write_field_defn(my_file, writer, field)?;
+    }
+
+    if is_developer {
+        fit_write_u8(my_file, writer, defn_mesg.dev_field_defns.len() as u8)?;
+        for field in &defn_mesg.dev_field_defns {
+            write_dev_field_defn(my_file, writer, field)?;
+        }
+    }
+
+//    let v = Arc::new(defn_mesg);
+//    my_file.context.field_definitions.insert(local_message_type, v.clone());
+
+    Ok(())
+}
 
 fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
                    data_type: FitDataType, count: u8)
@@ -653,8 +787,8 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
             Ok(FitFieldData::FitUint32(v))
         },
         FitDataType::FitString => {
-            let v = fit_read_string(my_file, reader, count as usize)?;
-            Ok(FitFieldData::FitString(v))
+            let v = fit_read_string(my_file, reader, &count)?;
+            Ok(FitFieldData::FitString(v,count))
         },
         FitDataType::FitF32 => {
             let mut v: Vec<f32> = Vec::new();
@@ -682,7 +816,7 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
             for _i in 0..count {
                 v.push(fit_read_u16(my_file, reader)?);
             }
-            Ok(FitFieldData::FitUint16(v))
+            Ok(FitFieldData::FitU16z(v))
         },
         FitDataType::FitU32z => {
             let mut v: Vec<u32> = Vec::new();
@@ -722,6 +856,87 @@ fn read_fit_field( my_file: &mut FitFile, reader: &mut BufReader<File>,
     }
 }
 
+fn write_fit_field(my_file: &mut FitFile, writer: &mut BufWriter<File>, field: &FitFieldData)
+                   -> Result< (), std::io::Error >
+{
+    match field {
+        FitFieldData::FitEnum(x) |
+        FitFieldData::FitUint8(x) |
+            FitFieldData::FitU8z(x) |
+            FitFieldData::FitByte(x)  => {
+            for item in x {
+                fit_write_u8(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitSint8(x)  => {
+            for item in x {
+                fit_write_i8(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitSint16(x)   => {
+            for item in x {
+                fit_write_i16(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitUint16(x)  |
+        FitFieldData::FitU16z(x) => {
+            for item in x {
+                fit_write_u16(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitSint32(x)   => {
+            for item in x {
+                fit_write_i32(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitUint32(x)  |
+        FitFieldData::FitU32z(x) => {
+            for item in x {
+                fit_write_u32(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitString(x, width) => {
+            println!("Writing string {} {}",x.len(),width);
+            fit_write_string(my_file, writer, x.as_str(), width )?;
+            println!("Done string");
+            Ok(())
+        },
+        FitFieldData::FitF32(x)  => {
+            for item in x {
+                fit_write_f32(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitF64(x)  => {
+            for item in x {
+                fit_write_f64(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+
+        FitFieldData::FitSInt64(x) => {
+            for item in x {
+                fit_write_i64(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+        FitFieldData::FitUint64(x) |
+        FitFieldData::FitUint64z(x)  => {
+            for item in x {
+                fit_write_u64(my_file, writer, *item)?;
+            }
+            Ok(())
+        },
+    }
+}
+
+
 fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
                             local_message_type: u8, timestamp: Option<u32>) -> Result< Arc<FitDataMessage>, std::io::Error> {
 
@@ -735,6 +950,7 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
 
     let mut mesg = FitDataMessage{
         global_message_num: defn_mesg.global_message_number,
+        local_message_type,
         timestamp,
         ..Default::default()
     };
@@ -786,6 +1002,43 @@ fn read_data_message( my_file: &mut FitFile, reader: &mut BufReader<File>,
     println!("Data message: {:?}", mesg);
 
     Ok( Arc::new(mesg) )
+}
+
+fn write_data_message( my_file: &mut FitFile, writer: &mut BufWriter<File>, mesg: &FitDataMessage)
+    -> Result< (), std::io::Error>
+{
+    let is_compressed = mesg.timestamp.is_some();
+    let record_hdr = if is_compressed {
+        assert!(mesg.local_message_type <= 0x03);
+
+        let prev_time_stamp = my_file.context.timestamp;
+        let new_timestamp = mesg.timestamp.unwrap();
+        if (new_timestamp - prev_time_stamp) > 0x1f {
+            println!("Warning: compressed timestamp overflow");
+        }
+        let time_offset = (new_timestamp & 0x1F) as u8;
+
+        0x80u8 | ((mesg.local_message_type & 0x3 ) << 5) | time_offset
+    }else {
+        assert!(mesg.local_message_type <= 0x0F);
+        mesg.local_message_type
+    };
+
+    fit_write_u8(my_file, writer, record_hdr)?;  // Write header byte
+
+    for field in &mesg.fields {
+        write_fit_field(my_file, writer, &field.data)?;
+
+        // If this is a timestamp, then update the file timestamp, for any compressed messages.
+        if field.field_defn_num == 253 {
+            match &field.data {
+                FitFieldData::FitUint32(value) => my_file.context.timestamp = value[0],
+                _ => println!("Warning, bad timestamp type")
+            }
+        }
+    }
+
+    Ok( () )
 }
 
 
@@ -840,7 +1093,18 @@ fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     }
 }
 
-fn print_rec(rec: FitRecord, pf: &ProfileData) {
+fn write_rec(my_file: &mut FitFile, writer: &mut BufWriter<File>, rec: &FitRecord)
+-> Result< (), std::io::Error>
+{
+    match rec {
+        FitRecord::HeaderRecord(header) => write_global_header(my_file, writer, header.as_ref()),
+        FitRecord::DefinitionMessage(defn) => write_definition_message(my_file, writer, defn.as_ref()),
+        FitRecord::DataRecord(data_message) => write_data_message(my_file, writer, data_message.as_ref()),
+    }
+}
+
+
+fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     match rec {
         FitRecord::HeaderRecord(_) => {},
         FitRecord::DataRecord(data_message) => {
@@ -866,28 +1130,26 @@ fn print_rec(rec: FitRecord, pf: &ProfileData) {
                     let field_string = format!("Field{}", ifield.field_defn_num);
                     field_name = field_string;
                 }
-                let mut value = Value::Null;
-                match &ifield.data {
-                    FitFieldData::FitEnum(x) => value = handle_fit_value(x),
-                    FitFieldData::FitSint8(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitUint8(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitSint16(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitUint16(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitSint32(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitUint32(x) => value = handle_fit_value(x),
-                    FitFieldData::FitString(x) => {
-                        value = Value::from(x.as_str());
-                    },
-                    FitFieldData::FitF32(x) => value = handle_fit_value(x),
-                    FitFieldData::FitF64(x) => value = handle_fit_value(x),
-                    FitFieldData::FitU8z(x) => value = handle_fit_value(x),
-                    FitFieldData::FitU16z(x) => value = handle_fit_value(x),
-                    FitFieldData::FitU32z(x) => value = handle_fit_value(x),
-                    FitFieldData::FitByte(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitSInt64(x) => value = handle_fit_value(x),
-                    FitFieldData::FitUint64(x)  => value = handle_fit_value(x),
-                    FitFieldData::FitUint64z(x)  => value = handle_fit_value(x),
-                }
+                let value =
+                    match &ifield.data {
+                        FitFieldData::FitEnum(x) => handle_fit_value(x),
+                        FitFieldData::FitSint8(x)  => handle_fit_value(x),
+                        FitFieldData::FitUint8(x)  => handle_fit_value(x),
+                        FitFieldData::FitSint16(x)  => handle_fit_value(x),
+                        FitFieldData::FitUint16(x)  => handle_fit_value(x),
+                        FitFieldData::FitSint32(x)  => handle_fit_value(x),
+                        FitFieldData::FitUint32(x) => handle_fit_value(x),
+                        FitFieldData::FitString(x,_) => Value::from(x.as_str()),
+                        FitFieldData::FitF32(x) => handle_fit_value(x),
+                        FitFieldData::FitF64(x) => handle_fit_value(x),
+                        FitFieldData::FitU8z(x) => handle_fit_value(x),
+                        FitFieldData::FitU16z(x) => handle_fit_value(x),
+                        FitFieldData::FitU32z(x) => handle_fit_value(x),
+                        FitFieldData::FitByte(x)  => handle_fit_value(x),
+                        FitFieldData::FitSInt64(x) => handle_fit_value(x),
+                        FitFieldData::FitUint64(x)  => handle_fit_value(x),
+                        FitFieldData::FitUint64z(x)  => handle_fit_value(x),
+                    };
                 map.insert(field_name.to_string(), value);
             }
             let message_name = if message.is_some() {
@@ -899,6 +1161,25 @@ fn print_rec(rec: FitRecord, pf: &ProfileData) {
         },
         FitRecord::DefinitionMessage(_) => {},
     }
+}
+
+fn crc_for_file(file: &mut std::fs::File) -> u16
+{
+    file.seek(std::io::SeekFrom::Start(0));
+
+    let mut buff = [0; 1024];
+    let mut crc = 0u16;
+    loop {
+        let n = match file.read(&mut buff) {
+            Ok(x) => {x},
+            Err(_) => {0},
+        };
+        if n == 0 {
+            break;
+        }
+        crc = fit_crc_16(crc, &buff[0..n]);
+    }
+    return crc;
 }
 
 fn read_file(path: &str) -> std::io::Result<()> {
@@ -913,16 +1194,51 @@ fn read_file(path: &str) -> std::io::Result<()> {
     println!("Reading header from: {}", path);
     my_file.header = read_global_header(&mut my_file, &mut reader)?;
 
+
+    let file_out = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("/tmp/fit_out.fit")?;
+
+    let mut writer = BufWriter::new(file_out);
+    let mut out_file: FitFile = Default::default();
+    out_file.context.architecture = Some(Endianness::Little);
+    out_file.header = Arc::new((*my_file.header).clone() );
+
+    let new_header_rec = FitRecord::HeaderRecord(out_file.header.clone());
+    write_rec(&mut out_file, &mut writer, &new_header_rec);
+
     let mut num_rec = 1;  // Count the header as one record.
-    while my_file.context.bytes_read < my_file.header.data_size {
+
+    // Read data, total file size is header + data + crc
+    let len_to_read = my_file.header.header_size as u32 + my_file.header.data_size;
+    while my_file.context.bytes_read < len_to_read {
         let rec = read_record(&mut my_file, &mut reader);
         match rec {
-            Ok(v) => print_rec(v, &p),
+            Ok(v) => {
+                print_rec(&v, &p);
+                write_rec(&mut out_file, &mut writer, &v) ?;
+            },
             Err(e) => println!("Skipping bad rec {}", e),
         }
         num_rec = num_rec + 1;
     }
 
+    writer.flush()?;
+    // Update data size, write new header.
+
+    let mut new_header = (*out_file.header).clone();
+    new_header.data_size = out_file.context.bytes_written - new_header.header_size as u32;
+    writer.seek(std::io::SeekFrom::Start(0) )?;
+    write_rec(&mut out_file, &mut writer, &FitRecord::HeaderRecord(Arc::new(new_header)));
+    writer.flush()?;  // Required.
+
+    // compute new crc
+    let crc_out = crc_for_file(writer.get_mut() );  // "inadvisable"
+    writer.seek(std::io::SeekFrom::End(0) )?;
+    writer.write_u16::<LittleEndian>(crc_out)?;
     println!("Info: Read {:} records from {:} bytes", num_rec, my_file.context.bytes_read );
 
     // Read directly as we don't want the crc value included in the crc computation.
