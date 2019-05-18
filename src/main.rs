@@ -21,35 +21,11 @@ use std::sync::Arc;
 mod profile;
 use crate::profile::{ProfileData};
 
+mod fitcrc;
+use crate::fitcrc::{FitCrc};
 
 const INVALID_U32: u32 = 0xFFFFFFFF;
 
-fn fit_crc_16_u8(mut crc: u16, byte: &u8) -> u16 {
-    let crc_table: [u16; 16] =  [
-        0x0000, 0xCC01, 0xD801, 0x1400, 0xF001, 0x3C00, 0x2800, 0xE401,
-        0xA001, 0x6C00, 0x7800, 0xB401, 0x5000, 0x9C01, 0x8801, 0x4400
-    ];
-
-    // compute checksum of lower four bits of byte
-    let mut tmp = crc_table[(crc & 0xF) as usize];
-    crc = (crc >> 4) & 0x0FFF;
-    crc = crc ^ tmp ^ crc_table[(byte & 0xF) as usize];
-
-    // now compute checksum of upper four bits of byte
-    tmp = crc_table[(crc & 0xF) as usize];
-    crc = (crc >> 4) & 0x0FFF;
-    crc = crc ^ tmp ^ crc_table[((byte >> 4) & 0xFu8) as usize];
-
-    return crc;
-}
-
-fn fit_crc_16(mut crc: u16, byte_array: &[u8]) -> u16 {
-
-    for byte in byte_array.iter() {
-        crc = fit_crc_16_u8(crc, byte);
-    }
-    return crc;
-}
 
 fn skip_bytes(reader: &mut BufReader<File>, count: u64) -> Result<u64, std::io::Error> {
     // Discard count bytes
@@ -195,7 +171,7 @@ struct FitDefinitionMessage {
 struct FitFileContext {
     bytes_read: u32,
     bytes_written: u32,
-    crc: u16,
+    crc: FitCrc,
     architecture: Option<Endianness>,
     field_definitions: HashMap<u8, Arc<FitDefinitionMessage> >,
     timestamp: u32,
@@ -236,7 +212,7 @@ enum FitRecord {
 fn fit_read_u8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u8, std::io::Error> {
     let byte = reader.read_u8()?;
     my_file.context.bytes_read = my_file.context.bytes_read + 1;
-    my_file.context.crc = fit_crc_16_u8(my_file.context.crc, &byte);
+    my_file.context.crc.consume(&[byte]);
     return Ok(byte);
 }
 
@@ -249,7 +225,7 @@ fn fit_write_u8(my_file: &mut FitFile, writer: &mut BufWriter<File>, byte: u8) -
 fn fit_read_i8(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i8, std::io::Error> {
     let byte = reader.read_u8()?;
     my_file.context.bytes_read = my_file.context.bytes_read + 1;
-    my_file.context.crc = fit_crc_16_u8(my_file.context.crc, &byte);
+    my_file.context.crc.consume(&[byte]);
     return Ok(byte as i8);
 }
 
@@ -271,7 +247,7 @@ fn fit_read_u16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 2;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(&buf);
     return Ok(v);
 }
 
@@ -297,7 +273,7 @@ fn fit_read_i16(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 2;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -323,7 +299,7 @@ fn fit_read_u32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 4;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -349,7 +325,7 @@ fn fit_read_i32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 4;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -375,7 +351,7 @@ fn fit_read_u64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<u
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 8;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -402,7 +378,7 @@ fn fit_read_i64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<i
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 8;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -428,7 +404,7 @@ fn fit_read_f32(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 4;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -454,7 +430,7 @@ fn fit_read_f64(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result<f
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
     my_file.context.bytes_read = my_file.context.bytes_read + 8;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(v);
 }
 
@@ -483,7 +459,7 @@ fn fit_read_string(my_file: &mut FitFile, reader: &mut BufReader<File>, width: &
     let the_string = String::from_utf8_lossy(&buf);
 
     my_file.context.bytes_read = my_file.context.bytes_read + buf.len() as u32;
-    my_file.context.crc = fit_crc_16(my_file.context.crc, & buf);
+    my_file.context.crc.consume(& buf);
     return Ok(the_string.to_string());
 }
 fn fit_write_string(my_file: &mut FitFile, writer: &mut BufWriter<File>, v: &str, width: &u8) -> Result<(), std::io::Error> {
@@ -534,7 +510,7 @@ fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Re
         header.crc = reader.read_u16::<LittleEndian>().unwrap();
         my_file.context.bytes_read += 2;
 
-        let actual_crc = fit_crc_16(0,&header_buf);
+        let actual_crc = fitcrc::compute(&header_buf);
         //println!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
         if (header.crc != 0) && (actual_crc != header.crc) {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header CRC is invalid"));
@@ -570,7 +546,7 @@ fn write_global_header(my_file: &mut FitFile, writer: &mut BufWriter<File>, head
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
-        let crc = fit_crc_16(0,&header_buf);
+        let crc = fitcrc::compute(&header_buf);
         writer.write_u16::<LittleEndian>(crc)?;
         my_file.context.bytes_written += 2;
     }
@@ -905,9 +881,7 @@ fn write_fit_field(my_file: &mut FitFile, writer: &mut BufWriter<File>, field: &
             Ok(())
         },
         FitFieldData::FitString(x, width) => {
-            println!("Writing string {} {}",x.len(),width);
             fit_write_string(my_file, writer, x.as_str(), width )?;
-            println!("Done string");
             Ok(())
         },
         FitFieldData::FitF32(x)  => {
@@ -1235,24 +1209,6 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     }
 }
 
-fn crc_for_file(file: &mut std::fs::File) -> Result< u16, std::io::Error>
-{
-    file.seek(std::io::SeekFrom::Start(0))?;
-
-    let mut buff = [0; 1024];
-    let mut crc = 0u16;
-    loop {
-        let n = match file.read(&mut buff) {
-            Ok(x) => {x},
-            Err(_) => {0},
-        };
-        if n == 0 {
-            break;
-        }
-        crc = fit_crc_16(crc, &buff[0..n]);
-    }
-    return Ok(crc);
-}
 
 fn read_file(path: &str) -> std::io::Result<()> {
     let mut my_file: FitFile = Default::default();
@@ -1312,14 +1268,14 @@ fn read_file(path: &str) -> std::io::Result<()> {
     writer.flush()?;  // Required.
 
     // compute new crc
-    let crc_out = crc_for_file(writer.get_mut() )?;  // "inadvisable"
+    let crc_out = fitcrc::crc_for_file(writer.get_mut() )?;  // "inadvisable"
     writer.seek(std::io::SeekFrom::End(0) )?;
     writer.write_u16::<LittleEndian>(crc_out)?;
     println!("Info: Read {:} records from {:} bytes", num_rec, my_file.context.bytes_read );
 
     // Read directly as we don't want the crc value included in the crc computation.
     let crc = reader.read_u16::<LittleEndian>()?;
-    println!("CRC: Computed 0x{:x}, Provided 0x{:x}", my_file.context.crc, crc);
+    println!("CRC: Computed 0x{:x}, Provided 0x{:x}", my_file.context.crc.digest(), crc);
 
     Ok(())
 }
