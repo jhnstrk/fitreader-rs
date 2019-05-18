@@ -990,6 +990,8 @@ fn write_data_message( my_file: &mut FitFile, writer: &mut BufWriter<File>, mesg
 
         let prev_time_stamp = my_file.context.timestamp;
         let new_timestamp = mesg.timestamp.unwrap();
+        assert!((prev_time_stamp & 0xFFFFFFE0) < new_timestamp);
+
         if (new_timestamp - prev_time_stamp) > 0x1f {
             println!("Warning: compressed timestamp overflow");
         }
@@ -1154,7 +1156,6 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     match rec {
         FitRecord::HeaderRecord(_) => {},
         FitRecord::DataRecord(data_message) => {
-
             let mut map = Map::new();
 
             if !data_message.timestamp.is_none() {
@@ -1165,7 +1166,7 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
             }
             let message = pf.get_message(data_message.global_message_num);
             let mut field_name: String;
-            for ifield in &data_message.fields{
+            for ifield in &data_message.fields {
                 let mut field_desc = Option::None;
                 if message.is_some() {
                     field_desc = message.unwrap().find_field(ifield.field_defn_num);
@@ -1179,22 +1180,22 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
                 let value =
                     match &ifield.data {
                         FitFieldData::FitEnum(x) => handle_fit_value(x),
-                        FitFieldData::FitSint8(x)  => handle_fit_value(x),
-                        FitFieldData::FitUint8(x)  => handle_fit_value(x),
-                        FitFieldData::FitSint16(x)  => handle_fit_value(x),
-                        FitFieldData::FitUint16(x)  => handle_fit_value(x),
-                        FitFieldData::FitSint32(x)  => handle_fit_value(x),
+                        FitFieldData::FitSint8(x) => handle_fit_value(x),
+                        FitFieldData::FitUint8(x) => handle_fit_value(x),
+                        FitFieldData::FitSint16(x) => handle_fit_value(x),
+                        FitFieldData::FitUint16(x) => handle_fit_value(x),
+                        FitFieldData::FitSint32(x) => handle_fit_value(x),
                         FitFieldData::FitUint32(x) => handle_fit_value(x),
-                        FitFieldData::FitString(x,_) => Value::from(x.as_str()),
+                        FitFieldData::FitString(x, _) => Value::from(x.as_str()),
                         FitFieldData::FitF32(x) => handle_fit_value(x),
                         FitFieldData::FitF64(x) => handle_fit_value(x),
                         FitFieldData::FitU8z(x) => handle_fit_value(x),
                         FitFieldData::FitU16z(x) => handle_fit_value(x),
                         FitFieldData::FitU32z(x) => handle_fit_value(x),
-                        FitFieldData::FitByte(x)  => handle_fit_value(x),
+                        FitFieldData::FitByte(x) => handle_fit_value(x),
                         FitFieldData::FitSInt64(x) => handle_fit_value(x),
-                        FitFieldData::FitUint64(x)  => handle_fit_value(x),
-                        FitFieldData::FitUint64z(x)  => handle_fit_value(x),
+                        FitFieldData::FitUint64(x) => handle_fit_value(x),
+                        FitFieldData::FitUint64z(x) => handle_fit_value(x),
                     };
                 map.insert(field_name.to_string(), value);
             }
@@ -1203,9 +1204,40 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
             } else {
                 format!("Message_{}", data_message.global_message_num)
             };
-            println!("{} {}",message_name,Value::Object(map));
+            println!("{} {}", message_name, Value::Object(map));
         },
-        FitRecord::DefinitionMessage(_) => {},
+        FitRecord::DefinitionMessage(defn_message) => {
+            let mut map = Map::new();
+            match defn_message.architecture {
+                Endianness::Little => {
+                    map.insert("architecture".to_string(), Value::from("LittleEndian"));
+                },
+                Endianness::Big => {
+                    map.insert("architecture".to_string(), Value::from("BigEndian"));
+                },
+            }
+            map.insert("local_message_type".to_string(), Value::from(defn_message.local_message_type));
+            map.insert("global_message_number".to_string(), Value::from(defn_message.global_message_number));
+            let message = pf.get_message(defn_message.global_message_number);
+
+            let mut field_vec: Vec<Value> = vec!();
+            for ifield in &defn_message.field_defns {
+                let mut field_desc = Option::None;
+                if message.is_some() {
+                    field_desc = message.unwrap().find_field(ifield.field_defn_num);
+                }
+                let field_name: String;
+                if field_desc.is_some() {
+                    field_name = field_desc.unwrap().field_name.clone();
+                } else {
+                    let field_string = format!("Field{}", ifield.field_defn_num);
+                    field_name = field_string;
+                }
+                field_vec.push(Value::from(field_name));
+            }
+            map.insert("field_defns".to_string(), Value::from(field_vec));
+            println!("{} {}", "field_defn", Value::Object(map));
+        }
     }
 }
 
