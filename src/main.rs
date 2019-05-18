@@ -5,11 +5,10 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate chrono;
 
-use chrono::{DateTime, Duration, Utc};
+use chrono::{Utc};
+use chrono::offset::TimeZone;
 
 use serde_json::{Value, Map};
-
-mod profile;
 
 use std::fs::{File, OpenOptions};
 use std::io::{BufReader, Read, BufWriter, Write, Seek};
@@ -17,10 +16,11 @@ use std::collections::HashMap;
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt, WriteBytesExt};
 
-//use std::borrow::Cow;
 use std::sync::Arc;
+
+mod profile;
 use crate::profile::{ProfileData};
-use chrono::offset::TimeZone;
+
 
 const INVALID_U32: u32 = 0xFFFFFFFF;
 
@@ -1142,7 +1142,6 @@ fn check_rec(my_file: &FitFile, rec: &FitRecord)
              -> Result< (), std::io::Error>
 {
     let now = Utc::now();
-    let tolerance = 0_i64;
     let base_datetime = Utc.ymd(1989, 12, 31).and_hms(0, 0, 0);
     let earliest_datetime = Utc.ymd(2018, 1, 1).and_hms(0, 0, 0);
     let latest_datetime = now.checked_add_signed(chrono::Duration::weeks(1) ).unwrap();
@@ -1152,8 +1151,8 @@ fn check_rec(my_file: &FitFile, rec: &FitRecord)
     let offset_max = clamp_timestamp( latest_datetime.timestamp() - base_datetime.timestamp());  // in seconds
 
     match rec {
-        FitRecord::HeaderRecord(header) => {},
-        FitRecord::DefinitionMessage(defn) => {},
+        FitRecord::HeaderRecord(_) => {},
+        FitRecord::DefinitionMessage(_) => {},
         FitRecord::DataRecord(data_message) => {
             let timestamp_opt = get_timestamp(data_message.as_ref());
             match timestamp_opt {
@@ -1236,9 +1235,9 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     }
 }
 
-fn crc_for_file(file: &mut std::fs::File) -> u16
+fn crc_for_file(file: &mut std::fs::File) -> Result< u16, std::io::Error>
 {
-    file.seek(std::io::SeekFrom::Start(0));
+    file.seek(std::io::SeekFrom::Start(0))?;
 
     let mut buff = [0; 1024];
     let mut crc = 0u16;
@@ -1252,7 +1251,7 @@ fn crc_for_file(file: &mut std::fs::File) -> u16
         }
         crc = fit_crc_16(crc, &buff[0..n]);
     }
-    return crc;
+    return Ok(crc);
 }
 
 fn read_file(path: &str) -> std::io::Result<()> {
@@ -1281,7 +1280,7 @@ fn read_file(path: &str) -> std::io::Result<()> {
     out_file.header = Arc::new((*my_file.header).clone() );
 
     let new_header_rec = FitRecord::HeaderRecord(out_file.header.clone());
-    write_rec(&mut out_file, &mut writer, &new_header_rec);
+    write_rec(&mut out_file, &mut writer, &new_header_rec)?;
 
     let mut num_rec = 1;  // Count the header as one record.
 
@@ -1309,11 +1308,11 @@ fn read_file(path: &str) -> std::io::Result<()> {
     let mut new_header = (*out_file.header).clone();
     new_header.data_size = out_file.context.bytes_written - new_header.header_size as u32;
     writer.seek(std::io::SeekFrom::Start(0) )?;
-    write_rec(&mut out_file, &mut writer, &FitRecord::HeaderRecord(Arc::new(new_header)));
+    write_rec(&mut out_file, &mut writer, &FitRecord::HeaderRecord(Arc::new(new_header)))?;
     writer.flush()?;  // Required.
 
     // compute new crc
-    let crc_out = crc_for_file(writer.get_mut() );  // "inadvisable"
+    let crc_out = crc_for_file(writer.get_mut() )?;  // "inadvisable"
     writer.seek(std::io::SeekFrom::End(0) )?;
     writer.write_u16::<LittleEndian>(crc_out)?;
     println!("Info: Read {:} records from {:} bytes", num_rec, my_file.context.bytes_read );
