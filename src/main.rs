@@ -5,19 +5,21 @@ extern crate serde_derive;
 extern crate serde_json;
 extern crate chrono;
 
+// std imports
+use std::fs::{File, OpenOptions};
+use std::io::{BufReader, Read, BufWriter, Write, Seek};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::env;
+
+use byteorder::{LittleEndian, BigEndian,  ReadBytesExt, WriteBytesExt};
+
 use chrono::{Utc};
 use chrono::offset::TimeZone;
 
 use serde_json::{Value, Map};
 
-use std::fs::{File, OpenOptions};
-use std::io::{BufReader, Read, BufWriter, Write, Seek};
-use std::collections::HashMap;
-
-use byteorder::{LittleEndian, BigEndian,  ReadBytesExt, WriteBytesExt};
-
-use std::sync::Arc;
-
+// Local imports
 mod profile;
 use crate::profile::{ProfileData};
 
@@ -1242,7 +1244,7 @@ fn print_rec(rec: &FitRecord, pf: &ProfileData) {
 }
 
 
-fn read_file(path: &str) -> std::io::Result<()> {
+fn read_file(path: &str) -> std::io::Result<FitFile> {
     let mut my_file: FitFile = Default::default();
     let p = profile::build_profile()?;
 
@@ -1309,15 +1311,21 @@ fn read_file(path: &str) -> std::io::Result<()> {
     let crc = reader.read_u16::<LittleEndian>()?;
     println!("CRC: Computed 0x{:x}, Provided 0x{:x}", my_file.context.crc.digest(), crc);
 
-    Ok(())
+    Ok(my_file)
 }
 
 fn main() {
-    let res: std::io::Result<()> = read_file("/tmp/foo.fit"); // Looks bad around byte 287037
-    //let res: std::io::Result<()> = read_file("/tmp/good.fit");
-    match res {
-        Ok(val) => val,
-        Err(e) => println!("Error: {:?}", e),
+    let args: Vec<String> = env::args().collect();
+
+    if args.len() <= 1 {
+        println!("Usage: fit_file input_file.fit");
+        return;
     }
+    let res = read_file(args.get(1).unwrap());
+
+    match res {
+        Ok(_) => {},
+        Err(e) => println!("Error: {:?}", e),
+    };
     println!("Done");
 }

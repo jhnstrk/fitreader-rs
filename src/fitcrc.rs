@@ -1,3 +1,6 @@
+
+extern crate base64;
+
 use std::io::{Read, Seek};
 
 #[derive(Copy, Clone, Default)]
@@ -84,5 +87,15 @@ mod tests {
         let ba_zeros : [u8; 8] = [0,0,0,0,0,0,0,0];
         assert_eq!(0, compute(&ba_zeros));
 
+        // Take a sample fit file, last 2 bytes are the 16-bit crc in LittleEndian.
+        // Pop them off, compare the computed CRC.
+        // The sample file is settings.fit from the FitSDKRelease_20.90.00
+        let mut settings_fit = base64::decode(
+            "DBBHAEQAAAAuRklUQAABAAAEAQKEAgKEAwSMAAEAAAABA9wAAeJAA\
+                   kAAAQADBQQChAEBAAIBAgMBAgUBAAADhAEcvgBAAAEABAEBAosAAGQ5UA==").unwrap();
+        let crc1 = settings_fit.pop().unwrap();
+        let crc2 = settings_fit.pop().unwrap();
+        let settings_crc = (crc2 as u16) | ((crc1 as u16) << 8);
+        assert_eq!(settings_crc, compute(&settings_fit[..]));
     }
 }
