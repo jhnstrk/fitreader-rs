@@ -2,8 +2,6 @@
 // we need to declare in the main module, that we are using them.
 #[macro_use]
 extern crate serde_derive;
-//extern crate serde_json;
-//extern crate chrono;
 
 pub mod fitcrc;
 pub mod fitread;

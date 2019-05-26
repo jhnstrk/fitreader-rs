@@ -12,6 +12,7 @@ use crate::profile::ProfileData;
 use crate::fitheader;
 use crate::fitdatamesg;
 use crate::fitdefnmesg;
+use byteorder::{LittleEndian, WriteBytesExt};
 
 fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     where Value: std::convert::From<T> + std::convert::From< Vec<T> >
@@ -129,6 +130,11 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
             map.insert("field_defns".to_string(), Value::from(field_vec));
             return ("definition".to_string(), Value::Object(map));
         }
+        FitRecord::EndOfFile(crc) => {
+            let mut map = Map::new();
+            map.insert("crc".to_string(), Value::from(*crc));
+            return ("EOF".to_string(), Value::Object(map));
+        }
     }
 }
 
@@ -176,12 +182,18 @@ pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< F
     }
 }
 
-pub fn write_rec(context: &mut FitFileContext, writer: &mut Write, rec: &FitRecord)
-             -> Result< (), std::io::Error>
+pub fn write_record(context: &mut FitFileContext, writer: &mut Write, rec: &FitRecord)
+                    -> Result< (), std::io::Error>
 {
     match rec {
-        FitRecord::HeaderRecord(header) => fitheader::write_global_header(context, writer, header.as_ref()),
-        FitRecord::DefinitionMessage(defn) => fitdefnmesg::write_definition_message(context, writer, defn.as_ref()),
-        FitRecord::DataRecord(data_message) => fitdatamesg::write_data_message(context, writer, data_message.as_ref()),
+        FitRecord::HeaderRecord(header)
+            => fitheader::write_global_header(context, writer, header),
+        FitRecord::DefinitionMessage(defn) =>
+            fitdefnmesg::write_definition_message(context, writer, defn.as_ref()),
+        FitRecord::DataRecord(data_message) =>
+            fitdatamesg::write_data_message(context, writer, data_message),
+        FitRecord::EndOfFile(crc) => {
+            writer.write_u16::<LittleEndian>(*crc)
+        }
     }
 }

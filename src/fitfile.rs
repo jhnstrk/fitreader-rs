@@ -2,22 +2,19 @@
 
 // std imports
 use std::fs::{File, OpenOptions};
-use std::io::{BufReader, BufWriter, Write, Seek};
-
-use std::sync::Arc;
+use std::io::{BufReader, BufWriter, Read, Write, Seek};
 
 use byteorder::{LittleEndian,  ReadBytesExt, WriteBytesExt};
 
 use crate::profile;
 
-use crate::fittypes::{ Endianness, FitFile, FitFileContext, FitRecord };
+use crate::fittypes::{Endianness, FitFile, FitFileContext, FitRecord, FitFileHeader};
 use crate::fitcrc;
 
 use crate::fitheader::{read_global_header};
-use crate::fitrecord::{read_record, write_rec, print_rec};
+use crate::fitrecord::{read_record, write_record, print_rec};
 use crate::fitcheck::{check_rec};
 
-use std::io::{ Read };
 
 impl FitFile {
     pub fn new() -> FitFile {
@@ -26,19 +23,81 @@ impl FitFile {
 }
 
 struct FitFileReader<R: Read> {
-    source: R
+    source: R,
+    context: FitFileContext,
+    data_size: Option<u32>,
 }
 
 impl<R: Read> FitFileReader<R> {
     pub fn new(source: R) -> FitFileReader<R> {
-        return FitFileReader{source};
+        return FitFileReader{source,
+            context: Default::default(),
+            data_size: None};
     }
 
-//    pub fn read_all(source: R) -> std::io::Result<FitFile>  {
-//        return read_file_read(&mut self.source);
-//    }
+    pub fn read_global_header(&mut self) -> std::io::Result< FitFileHeader > {
+        let header = read_global_header(&mut self.context, &mut self.source)?;
+        self.data_size = Some(header.data_size);
+        return Ok(header);
+    }
+
+    pub fn read_next(&mut self) -> std::io::Result<FitRecord>  {
+        if self.data_size.is_none() {
+            return Ok(FitRecord::HeaderRecord(
+                read_global_header(&mut self.context, &mut self.source)? ) );
+        }
+        if self.data_size.is_some() && (self.context.data_bytes_read < self.data_size.unwrap()) {
+            return read_record(&mut self.context, &mut self.source);
+        } else {
+            return Ok(FitRecord::EndOfFile(self.source.read_u16::<LittleEndian>()?));
+        }
+
+    }
+
+    pub fn source(&self) -> &R   {&self.source}
 }
 
+struct FitFileWriter<W: Write + Seek> {
+    target: W,
+    context: FitFileContext,
+    header: FitFileHeader,
+}
+
+impl<W: Read + Write + Seek> FitFileWriter<W> {
+    pub fn new(target: W) -> FitFileWriter<W> {
+        FitFileWriter{target, context: Default::default(),
+        header: Default::default(),
+        }
+    }
+
+    pub fn write_global_header(&mut self, header: &FitFileHeader) -> std::io::Result<()> {
+        self.header = header.clone();
+        write_record(&mut self.context, &mut self.target,
+                     &FitRecord::HeaderRecord(self.header))
+    }
+
+    pub fn write_next(&mut self, rec: &FitRecord) -> std::io::Result<()>  {
+        write_record(&mut self.context, &mut self.target, rec)
+    }
+
+    pub fn finalize(&mut self) -> std::io::Result<()>  {
+        self.target.flush()?;
+        // Update data size, write new header.
+        self.header.data_size = self.context.data_bytes_written;
+        self.target.seek(std::io::SeekFrom::Start(0) )?;
+        write_record(&mut self.context, &mut self.target,
+                     &FitRecord::HeaderRecord(self.header))?;
+        self.target.flush()?;  // Required.
+
+        // compute new crc
+        let crc_out = fitcrc::crc_for_file(&mut self.target )?;  // "inadvisable"
+        self.target.seek(std::io::SeekFrom::End(0) )?;
+        self.target.write_u16::<LittleEndian>(crc_out)
+    }
+
+    pub fn target(&self) -> &W   {&self.target}
+
+}
 
 pub fn read_file_filename(path: &str) -> std::io::Result<FitFile> {
     println!("Opening file: {}", path);
@@ -55,8 +114,8 @@ pub fn read_file_read(source: &mut Read) -> std::io::Result<FitFile> {
     my_file.header = read_global_header(&mut context, &mut reader)?;
 
     // Read data, total file size is header + data + crc
-    let len_to_read = my_file.header.header_size as u32 + my_file.header.data_size;
-    while context.bytes_read < len_to_read {
+    let len_to_read =  my_file.header.data_size;
+    while context.data_bytes_read < len_to_read {
         let rec = read_record(&mut context, &mut reader);
         match rec {
             Ok(v) => {
@@ -98,22 +157,22 @@ pub fn read_file(path: &str) -> std::io::Result<FitFile> {
     let mut writer = BufWriter::new(file_out);
     let mut out_context: FitFileContext = Default::default();
     out_context.architecture = Some(Endianness::Little);
-    let mut out_header = (*my_file.header).clone();
+    let mut out_header = (my_file.header).clone();
 
-    let new_header_rec = FitRecord::HeaderRecord(Arc::new(out_header.clone() ));
-    write_rec(&mut out_context, &mut writer, &new_header_rec)?;
+    let new_header_rec = FitRecord::HeaderRecord(out_header.clone());
+    write_record(&mut out_context, &mut writer, &new_header_rec)?;
 
     let mut num_rec = 1;  // Count the header as one record.
 
     // Read data, total file size is header + data + crc
-    let len_to_read = my_file.header.header_size as u32 + my_file.header.data_size;
-    while context.bytes_read < len_to_read {
+    let len_to_read = my_file.header.data_size;
+    while context.data_bytes_read < len_to_read {
         let rec = read_record(&mut context, &mut reader);
         match rec {
             Ok(v) => {
                 print_rec(&v, &p);
                 match check_rec(&context, &v ) {
-                    Ok(_) => {write_rec(&mut out_context, &mut writer, &v) ?;},
+                    Ok(_) => { write_record(&mut out_context, &mut writer, &v) ?;},
                     Err(e) => println!("Skipping bad values in rec {}", e),
                 }
 
@@ -126,16 +185,16 @@ pub fn read_file(path: &str) -> std::io::Result<FitFile> {
     writer.flush()?;
     // Update data size, write new header.
 
-    out_header.data_size = out_context.bytes_written - out_header.header_size as u32;
+    out_header.data_size = out_context.data_bytes_written;
     writer.seek(std::io::SeekFrom::Start(0) )?;
-    write_rec(&mut out_context, &mut writer, &FitRecord::HeaderRecord(Arc::new(out_header)))?;
+    write_record(&mut out_context, &mut writer, &FitRecord::HeaderRecord(out_header))?;
     writer.flush()?;  // Required.
 
     // compute new crc
     let crc_out = fitcrc::crc_for_file(writer.get_mut() )?;  // "inadvisable"
     writer.seek(std::io::SeekFrom::End(0) )?;
     writer.write_u16::<LittleEndian>(crc_out)?;
-    println!("Info: Read {:} records from {:} bytes", num_rec, context.bytes_read );
+    println!("Info: Read {:} records from {:} bytes", num_rec, context.data_bytes_read);
 
     // Read directly as we don't want the crc value included in the crc computation.
     let crc = reader.read_u16::<LittleEndian>()?;
@@ -150,20 +209,25 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::fittypes::{FitFieldData};
+    use std::io::{Cursor};
+
+    /// This sample file is settings.fit from the FitSDKRelease_20.90.00
+    fn get_settings_fit() -> Vec<u8> {
+        base64::decode(
+            "DBBHAEQAAAAuRklUQAABAAAEAQKEAgKEAwSMAAEAAAABA9wAAeJAA\
+                   kAAAQADBQQChAEBAAIBAgMBAgUBAAADhAEcvgBAAAEABAEBAosAAGQ5UA==")
+            .unwrap()
+    }
 
     #[test]
     fn test_read_settings() {
-        // The sample file is settings.fit from the FitSDKRelease_20.90.00
-        let settings_fit = base64::decode(
-            "DBBHAEQAAAAuRklUQAABAAAEAQKEAgKEAwSMAAEAAAABA9wAAeJAA\
-                   kAAAQADBQQChAEBAAIBAgMBAgUBAAADhAEcvgBAAAEABAEBAosAAGQ5UA==").unwrap();
-
+        let settings_fit = get_settings_fit();
         let file_read = read_file_read(&mut settings_fit.as_slice());
         assert!(file_read.is_ok());
 
         let file_data = file_read.unwrap();
         assert_eq!(68, file_data.header.data_size);
-        assert_eq!(6, file_data.records.len() );
+        assert_eq!(6, file_data.records.len());
 
         match &file_data.records[0] {
             FitRecord::DefinitionMessage(x) => {
@@ -171,7 +235,7 @@ mod tests {
                 assert_eq!(0, x.global_message_number); //file_id
                 assert_eq!(4, x.field_defns.len());
             },
-            _ => {assert!(false)},
+            _ => { assert!(false) },
         }
 
         match &file_data.records[3] {
@@ -185,7 +249,7 @@ mod tests {
                         assert_eq!(1, x.len());
                         assert_eq!(900, x[0]);   // 90.0kg, scale factor 10.
                     },
-                    _ => {assert!(false)},
+                    _ => { assert!(false) },
                 }
                 assert_eq!(3, x.fields[3].field_defn_num); //weight
                 match &x.fields[3].data {
@@ -193,10 +257,41 @@ mod tests {
                         assert_eq!(1, x.len());
                         assert_eq!(190, x[0]);   // 1.9m, scale factor 100.
                     },
-                    _ => {assert!(false)},
+                    _ => { assert!(false) },
                 }
             },
-            _ => {assert!(false)},
+            _ => { assert!(false) },
         }
+    }
+
+    #[test]
+    fn test_read_write() -> Result<(), std::io::Error> {
+        let settings_fit = get_settings_fit();
+        let mut in_cursor = Cursor::new( get_settings_fit() );
+
+        let mut reader = FitFileReader::new(&mut in_cursor);
+        let out_cursor = Cursor::new(Vec::new());
+        let mut writer = FitFileWriter::new(out_cursor);
+        let header = reader.read_global_header()?;
+        writer.write_global_header(&header)?;
+
+        loop {
+            let field = reader.read_next()?;
+            match field{
+                FitRecord::HeaderRecord(_) => {panic!("BAD header record");},
+                FitRecord::DataRecord(_) |
+                FitRecord::DefinitionMessage(_) => {
+                    writer.write_next(&field)?;
+                },
+                FitRecord::EndOfFile(_) => {break;},
+            }
+        }
+        writer.finalize()?;
+
+        let buf = writer.target().get_ref().clone();
+
+        assert_eq!(settings_fit.len(), buf.len());
+        assert_eq!(settings_fit, buf);
+        Ok(())
     }
 }

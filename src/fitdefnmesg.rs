@@ -90,7 +90,7 @@ pub fn read_definition_message( context: &mut FitFileContext, reader: &mut Read,
     let number_of_fields = fit_read_u8(context, reader)?;
 
     println!("Definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
-             local_message_type, global_message_number, number_of_fields, context.bytes_read);
+             local_message_type, global_message_number, number_of_fields, context.data_bytes_read);
 
     let mut defn_mesg = FitDefinitionMessage {
         architecture: endian,
@@ -130,23 +130,18 @@ pub fn write_definition_message( context: &mut FitFileContext, writer: &mut Writ
     fit_write_u8(context, writer, record_hdr)?;  // Write header byte
     fit_write_u8(context, writer, 0u8)?;  // Write a reserved byte
 
-    match context.architecture {
-        Some(x) => {
-            match x {
-                Endianness::Big => fit_write_u8(context, writer, 1u8)?,
-                Endianness::Little => fit_write_u8(context, writer, 0u8)?,
-            };
-        }
-
-        None => return Err(std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set")),
-    };
+    match defn_mesg.architecture {
+        Endianness::Big => fit_write_u8(context, writer, 1u8)?,
+        Endianness::Little => fit_write_u8(context, writer, 0u8)?,
+    }
+    context.architecture = Some(defn_mesg.architecture);
 
     fit_write_u16(context, writer, defn_mesg.global_message_number)?;
     fit_write_u8(context, writer, defn_mesg.field_defns.len() as u8)?;
 
     println!("Writing definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
              defn_mesg.local_message_type, defn_mesg.global_message_number,
-             defn_mesg.field_defns.len(), context.bytes_written);
+             defn_mesg.field_defns.len(), context.data_bytes_written);
 
     for field in &defn_mesg.field_defns {
         write_field_defn(context, writer, field)?;
@@ -159,8 +154,8 @@ pub fn write_definition_message( context: &mut FitFileContext, writer: &mut Writ
         }
     }
 
-//    let v = Arc::new(defn_mesg);
-//    context.field_definitions.insert(local_message_type, v.clone());
+    let v = Arc::new(defn_mesg.clone());
+    context.field_definitions.insert(defn_mesg.local_message_type, v);
 
     Ok(())
 }

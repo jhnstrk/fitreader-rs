@@ -30,7 +30,7 @@ pub fn compute(data: &[u8]) -> u16 {
     return context.digest();
 }
 
-pub fn crc_for_file(file: &mut std::fs::File) -> Result< u16, std::io::Error>
+pub fn crc_for_file<T: Read + Seek>(file: &mut T) -> Result< u16, std::io::Error>
 {
     file.seek(std::io::SeekFrom::Start(0))?;
 

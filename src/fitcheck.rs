@@ -56,8 +56,9 @@ pub fn check_rec(context: &FitFileContext, rec: &FitRecord)
     match rec {
         FitRecord::HeaderRecord(_) => {},
         FitRecord::DefinitionMessage(_) => {},
+        FitRecord::EndOfFile(_) => {},
         FitRecord::DataRecord(data_message) => {
-            let timestamp_opt = get_timestamp(data_message.as_ref());
+            let timestamp_opt = get_timestamp(&data_message);
             match timestamp_opt {
                 None => {},
                 Some(x) => {

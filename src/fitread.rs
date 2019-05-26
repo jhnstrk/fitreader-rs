@@ -6,7 +6,7 @@ use crate::fittypes::{Endianness, FitFileContext};
 
 pub fn fit_read_u8(context: &mut FitFileContext, reader: &mut Read) -> Result<u8, std::io::Error> {
     let byte = reader.read_u8()?;
-    context.bytes_read = context.bytes_read + 1;
+    context.data_bytes_read = context.data_bytes_read + 1;
     context.crc.consume(&[byte]);
     return Ok(byte);
 }
@@ -14,7 +14,7 @@ pub fn fit_read_u8(context: &mut FitFileContext, reader: &mut Read) -> Result<u8
 
 pub fn fit_read_i8(context: &mut FitFileContext, reader: &mut Read) -> Result<i8, std::io::Error> {
     let byte = reader.read_u8()?;
-    context.bytes_read = context.bytes_read + 1;
+    context.data_bytes_read = context.data_bytes_read + 1;
     context.crc.consume(&[byte]);
     return Ok(byte as i8);
 }
@@ -30,7 +30,7 @@ pub fn fit_read_u16(context: &mut FitFileContext, reader: &mut Read) -> Result<u
         Some(Endianness::Big) => rdr.read_u16::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 2;
+    context.data_bytes_read = context.data_bytes_read + 2;
     context.crc.consume(&buf);
     return Ok(v);
 }
@@ -47,7 +47,7 @@ pub fn fit_read_i16(context: &mut FitFileContext, reader: &mut Read) -> Result<i
         Some(Endianness::Big) => rdr.read_i16::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 2;
+    context.data_bytes_read = context.data_bytes_read + 2;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -63,7 +63,7 @@ pub fn fit_read_u32(context: &mut FitFileContext, reader: &mut Read) -> Result<u
         Some(Endianness::Big) => rdr.read_u32::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 4;
+    context.data_bytes_read = context.data_bytes_read + 4;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -79,7 +79,7 @@ pub fn fit_read_i32(context: &mut FitFileContext, reader: &mut Read) -> Result<i
         Some(Endianness::Big) => rdr.read_i32::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 4;
+    context.data_bytes_read = context.data_bytes_read + 4;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -95,7 +95,7 @@ pub fn fit_read_u64(context: &mut FitFileContext, reader: &mut Read) -> Result<u
         Some(Endianness::Big) => rdr.read_u64::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 8;
+    context.data_bytes_read = context.data_bytes_read + 8;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -113,7 +113,7 @@ pub fn fit_read_i64(context: &mut FitFileContext, reader: &mut Read) -> Result<i
         Some(Endianness::Big) => rdr.read_i64::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 8;
+    context.data_bytes_read = context.data_bytes_read + 8;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -129,7 +129,7 @@ pub fn fit_read_f32(context: &mut FitFileContext, reader: &mut Read) -> Result<f
         Some(Endianness::Big) => rdr.read_f32::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 4;
+    context.data_bytes_read = context.data_bytes_read + 4;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -145,7 +145,7 @@ pub fn fit_read_f64(context: &mut FitFileContext, reader: &mut Read) -> Result<f
         Some(Endianness::Big) => rdr.read_f64::<BigEndian>()?,
         None => return Err( std::io::Error::new(std::io::ErrorKind::Other, "Endianness not set"))
     };
-    context.bytes_read = context.bytes_read + 8;
+    context.data_bytes_read = context.data_bytes_read + 8;
     context.crc.consume(& buf);
     return Ok(v);
 }
@@ -164,7 +164,7 @@ pub fn fit_read_string(context: &mut FitFileContext, reader: &mut Read, width: &
 
     let the_string = String::from_utf8_lossy(&buf);
 
-    context.bytes_read = context.bytes_read + buf.len() as u32;
+    context.data_bytes_read = context.data_bytes_read + buf.len() as u32;
     context.crc.consume(& buf);
     return Ok(the_string.to_string());
 }

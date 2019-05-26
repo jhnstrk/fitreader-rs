@@ -2,7 +2,6 @@
 
 // std imports
 use std::io::{Read, Write};
-use std::sync::Arc;
 
 use byteorder::{LittleEndian,  ReadBytesExt, WriteBytesExt};
 
@@ -12,7 +11,7 @@ use crate::fitcrc;
 use crate::fitread::{fit_read_u8, fit_read_u16};
 use crate::fitwrite::{fit_write_u8, fit_write_u16};
 
-pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Result< Arc<FitFileHeader>, std::io::Error> {
+pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Result< FitFileHeader, std::io::Error> {
 
     let mut header_buf: [u8; 12] = [0; 12];
 
@@ -37,13 +36,13 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Re
         return Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT signature"));
     }
 
-    context.bytes_read = 12;
+    context.data_bytes_read = 12;
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
         context.architecture = Some(Endianness::Little);
         header.crc = fit_read_u16(context, reader)?;
-        context.bytes_read += 2;
+        context.data_bytes_read += 2;
 
         let actual_crc = fitcrc::compute(&header_buf);
         //println!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
@@ -52,12 +51,13 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Re
         }
     }
 
-    if header.header_size as u32 > context.bytes_read {
-        while header.header_size as u32 > context.bytes_read {
+    if header.header_size as u32 > context.data_bytes_read {
+        while header.header_size as u32 > context.data_bytes_read {
             fit_read_u8(context, reader)?;
         }
     }
-    Ok( Arc::new(header) )
+    context.data_bytes_read = 0;
+    Ok( header )
 }
 
 pub fn write_global_header(context: &mut FitFileContext, writer: &mut Write, header: &FitFileHeader)
@@ -78,7 +78,6 @@ pub fn write_global_header(context: &mut FitFileContext, writer: &mut Write, hea
         header_buf.copy_from_slice(header_writer.as_slice());
     }
     context.crc.reset();
-    context.bytes_written = 0;
     context.architecture = Some(Endianness::Little);
     for _i in 0..12 {
         fit_write_u8(context, writer, header_buf[_i])?;
@@ -89,6 +88,8 @@ pub fn write_global_header(context: &mut FitFileContext, writer: &mut Write, hea
         let crc = fitcrc::compute(&header_buf);
         fit_write_u16(context, writer, crc)?;
     }
+
+    context.data_bytes_written = 0;
 
     if header.header_size as u32 > 14 {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header size is invalid"));

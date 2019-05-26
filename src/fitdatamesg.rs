@@ -1,7 +1,6 @@
 
 // std imports
 use std::io::{Read, Write};
-use std::sync::Arc;
 
 use crate::fittypes::{FitFieldData, FitDataMessage, FitDataField, fit_data_size, FitFileContext};
 use crate::fitwrite::{fit_write_u8};
@@ -9,9 +8,9 @@ use crate::fitwrite::{fit_write_u8};
 use crate::fitfield::{read_fit_field, write_fit_field};
 
 pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
-                      local_message_type: u8, timestamp: Option<u32>) -> Result< Arc<FitDataMessage>, std::io::Error> {
+                      local_message_type: u8, timestamp: Option<u32>) -> Result< FitDataMessage, std::io::Error> {
 
-    println!("Data message, local ID: {:} at byte {:}", local_message_type, context.bytes_read);
+    println!("Data message, local ID: {:} at byte {:}", local_message_type, context.data_bytes_read);
 
     let defn_mesg=
         match context.field_definitions.get(&local_message_type) {
@@ -72,7 +71,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
 
     println!("Data message: {:?}", mesg);
 
-    Ok( Arc::new(mesg) )
+    Ok(mesg)
 }
 
 pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mesg: &FitDataMessage)
@@ -99,6 +98,11 @@ pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mes
 
     fit_write_u8(context, writer, record_hdr)?;  // Write header byte
 
+    let defn = context.field_definitions.get(&mesg.local_message_type);
+    match defn {
+        None => {println!("Using defaults");},
+        Some(x) => {context.architecture = Some(x.architecture);},
+    }
     for field in &mesg.fields {
         write_fit_field(context, writer, &field.data)?;
 

@@ -143,8 +143,8 @@ pub struct FitDefinitionMessage {
 #[derive(Default)]
 #[derive(Debug)]
 pub struct FitFileContext {
-    pub bytes_read: u32,
-    pub bytes_written: u32,
+    pub data_bytes_read: u32,
+    pub data_bytes_written: u32,
     pub crc: FitCrc,
     pub architecture: Option<Endianness>,
     pub field_definitions: HashMap<u8, Arc<FitDefinitionMessage> >,
@@ -155,7 +155,7 @@ pub struct FitFileContext {
 #[derive(Default)]
 #[derive(Debug)]
 pub struct FitFile {
-    pub header: Arc<FitFileHeader>,
+    pub header: FitFileHeader,
     pub records: Vec<FitRecord>,
 }
 
@@ -177,10 +177,10 @@ pub struct FitDataMessage {
 
 #[derive(Debug)]
 pub enum FitRecord {
-    HeaderRecord(Arc<FitFileHeader>),
-    DataRecord(Arc<FitDataMessage>),
+    HeaderRecord(FitFileHeader),
+    DataRecord(FitDataMessage),
     DefinitionMessage(Arc<FitDefinitionMessage>),
-//    EndOfFile(u16),
+    EndOfFile(u16),
 }
 
 
