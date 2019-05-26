@@ -4,7 +4,7 @@ use std::io::{BufReader, BufWriter};
 
 use serde_json::{Value, Map};
 
-use crate::fittypes::{ Endianness, FitFile,
+use crate::fittypes::{ Endianness, FitFileContext,
                        FitFieldData, FitRecord,
                         INVALID_U32};
 use crate::fitread::{fit_read_u8};
@@ -138,8 +138,8 @@ pub fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     println!("{}: {}", name, value);
 }
 
-pub fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< FitRecord, std::io::Error> {
-    let record_hdr = fit_read_u8(my_file, reader)?;
+pub fn read_record(context: &mut FitFileContext, reader: &mut BufReader<File>) -> Result< FitRecord, std::io::Error> {
+    let record_hdr = fit_read_u8(context, reader)?;
     let is_normal_header = (record_hdr & 0x80) == 0;
     let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
 
@@ -153,11 +153,11 @@ pub fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Resul
             //Definition message
             let is_developer = record_hdr & 0x20 != 0;
             return Ok(FitRecord::DefinitionMessage(
-                fitdefnmesg::read_definition_message( my_file, reader, local_message_type, is_developer)?));
+                fitdefnmesg::read_definition_message( context, reader, local_message_type, is_developer)?));
         } else {
             // Data message
             return Ok(FitRecord::DataRecord(
-                fitdatamesg::read_data_message( my_file, reader, local_message_type, None)?));
+                fitdatamesg::read_data_message( context, reader, local_message_type, None)?));
         }
     } else {
         // Compressed timestamp header
@@ -165,7 +165,7 @@ pub fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Resul
         let local_message_type = (record_hdr >> 5) & 0x03;
         let time_offset = (record_hdr & 0x1F) as u32;
 
-        let prev_time_stamp = my_file.context.timestamp;
+        let prev_time_stamp = context.timestamp;
         let new_timestamp = if time_offset >= (prev_time_stamp & 0x1fu32) {
             (prev_time_stamp & 0xFFFFFFE0) + time_offset
         } else {
@@ -173,16 +173,16 @@ pub fn read_record(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Resul
         };
         // Data message
         return Ok(FitRecord::DataRecord(
-            fitdatamesg::read_data_message( my_file, reader, local_message_type, Some(new_timestamp))?) );
+            fitdatamesg::read_data_message( context, reader, local_message_type, Some(new_timestamp))?) );
     }
 }
 
-pub fn write_rec(my_file: &mut FitFile, writer: &mut BufWriter<File>, rec: &FitRecord)
+pub fn write_rec(context: &mut FitFileContext, writer: &mut BufWriter<File>, rec: &FitRecord)
              -> Result< (), std::io::Error>
 {
     match rec {
-        FitRecord::HeaderRecord(header) => fitheader::write_global_header(my_file, writer, header.as_ref()),
-        FitRecord::DefinitionMessage(defn) => fitdefnmesg::write_definition_message(my_file, writer, defn.as_ref()),
-        FitRecord::DataRecord(data_message) => fitdatamesg::write_data_message(my_file, writer, data_message.as_ref()),
+        FitRecord::HeaderRecord(header) => fitheader::write_global_header(context, writer, header.as_ref()),
+        FitRecord::DefinitionMessage(defn) => fitdefnmesg::write_definition_message(context, writer, defn.as_ref()),
+        FitRecord::DataRecord(data_message) => fitdatamesg::write_data_message(context, writer, data_message.as_ref()),
     }
 }

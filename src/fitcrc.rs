@@ -37,7 +37,7 @@ pub fn crc_for_file(file: &mut std::fs::File) -> Result< u16, std::io::Error>
     loop {
         let n = match file.read(&mut buff) {
             Ok(x) => {x},
-            Err(_) => {0},
+            Err(e) => { return Err(e);},
         };
         if n == 0 {
             break;

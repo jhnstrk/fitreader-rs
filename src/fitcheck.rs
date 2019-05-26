@@ -5,7 +5,7 @@ use chrono::{Utc};
 use chrono::offset::TimeZone;
 
 
-use crate::fittypes::{ FitFile,
+use crate::fittypes::{ FitFileContext,
                        FitFieldData,
                        FitRecord, FitDataMessage};
 
@@ -41,7 +41,7 @@ fn clamp_timestamp(v: i64) -> u32
     }
 }
 
-pub fn check_rec(my_file: &FitFile, rec: &FitRecord)
+pub fn check_rec(context: &FitFileContext, rec: &FitRecord)
              -> Result< (), std::io::Error>
 {
     let now = Utc::now();
@@ -66,7 +66,7 @@ pub fn check_rec(my_file: &FitFile, rec: &FitRecord)
                     if x < offset_min || x > offset_max {
                         let errstr = format!("Timestamp error: Out of permitted range {}", utc_dt.to_rfc3339());
                         return Err(std::io::Error::new(std::io::ErrorKind::Other, errstr));
-                    } else if x < my_file.context.timestamp {
+                    } else if x < context.timestamp {
                         let errstr = format!("Timestamp error: Timestamp is before previous one {}", utc_dt.to_rfc3339());
                         return Err(std::io::Error::new(std::io::ErrorKind::Other, errstr));
                     } else {

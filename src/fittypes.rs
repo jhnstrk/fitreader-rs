@@ -156,7 +156,7 @@ pub struct FitFileContext {
 #[derive(Debug)]
 pub struct FitFile {
     pub header: Arc<FitFileHeader>,
-    pub context: FitFileContext,
+    pub records: Vec<FitRecord>,
 }
 
 
@@ -175,6 +175,7 @@ pub struct FitDataMessage {
     pub dev_fields: Vec<FitDataField>,
 }
 
+#[derive(Debug)]
 pub enum FitRecord {
     HeaderRecord(Arc<FitFileHeader>),
     DataRecord(Arc<FitDataMessage>),

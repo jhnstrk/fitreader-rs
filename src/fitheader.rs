@@ -8,11 +8,11 @@ use std::sync::Arc;
 use byteorder::{LittleEndian,  ReadBytesExt, WriteBytesExt};
 
 // Local imports
-use crate::fittypes::{ FitFile, FitFileHeader};
+use crate::fittypes::{ FitFileContext, FitFileHeader};
 use crate::fitcrc;
 
 
-pub fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -> Result< Arc<FitFileHeader>, std::io::Error> {
+pub fn read_global_header(context: &mut FitFileContext, reader: &mut BufReader<File>) -> Result< Arc<FitFileHeader>, std::io::Error> {
 
     let mut header_buf: [u8; 12] = [0; 12];
     reader.read_exact(&mut header_buf)?;
@@ -33,12 +33,12 @@ pub fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -
         return Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT signature"));
     }
 
-    my_file.context.bytes_read = 12;
+    context.bytes_read = 12;
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
         header.crc = reader.read_u16::<LittleEndian>().unwrap();
-        my_file.context.bytes_read += 2;
+        context.bytes_read += 2;
 
         let actual_crc = fitcrc::compute(&header_buf);
         //println!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
@@ -47,15 +47,15 @@ pub fn read_global_header(my_file: &mut FitFile, reader: &mut BufReader<File>) -
         }
     }
 
-    if header.header_size as u32 > my_file.context.bytes_read {
-        while header.header_size as u32 > my_file.context.bytes_read {
+    if header.header_size as u32 > context.bytes_read {
+        while header.header_size as u32 > context.bytes_read {
             reader.read_u8()?;
         }
     }
     Ok( Arc::new(header) )
 }
 
-pub fn write_global_header(my_file: &mut FitFile, writer: &mut BufWriter<File>, header: &FitFileHeader)
+pub fn write_global_header(context: &mut FitFileContext, writer: &mut BufWriter<File>, header: &FitFileHeader)
                        -> Result< (), std::io::Error>
 {
     let mut header_buf: [u8; 12] = [0; 12];
@@ -74,13 +74,13 @@ pub fn write_global_header(my_file: &mut FitFile, writer: &mut BufWriter<File>, 
     }
     writer.write_all(&header_buf)?;
 
-    my_file.context.bytes_written = 12;
+    context.bytes_written = 12;
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
         let crc = fitcrc::compute(&header_buf);
         writer.write_u16::<LittleEndian>(crc)?;
-        my_file.context.bytes_written += 2;
+        context.bytes_written += 2;
     }
 
     if header.header_size as u32 > 14 {
