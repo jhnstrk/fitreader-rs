@@ -41,7 +41,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                     map.insert(String::from("timestamp"), Value::from(value));
                 }
             }
-            let message = pf.get_message(data_message.global_message_num);
+            let message = pf.get_message(data_message.global_message_number);
             let mut field_vec: Vec<Value> = vec!();
             for ifield in &data_message.fields {
                 let field_name: String;
@@ -88,7 +88,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
             let message_name = if message.is_some() {
                 message.unwrap().message_name.clone()
             } else {
-                format!("Message_{}", data_message.global_message_num)
+                format!("Message_{}", data_message.global_message_number)
             };
             map.insert("message".to_string(), Value::from(message_name));
             map.insert( "fields".to_string(), Value::Array(field_vec));

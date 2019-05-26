@@ -168,7 +168,7 @@ pub struct FitDataField {
 
 #[derive(Debug,Default)]
 pub struct FitDataMessage {
-    pub global_message_num: u16,
+    pub global_message_number: u16,
     pub local_message_type: u8,
     pub timestamp: Option<u32>,    // Only set for compressed messages.
     pub fields: Vec<FitDataField>,
@@ -180,6 +180,7 @@ pub enum FitRecord {
     HeaderRecord(Arc<FitFileHeader>),
     DataRecord(Arc<FitDataMessage>),
     DefinitionMessage(Arc<FitDefinitionMessage>),
+//    EndOfFile(u16),
 }
 
 

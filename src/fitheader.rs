@@ -1,22 +1,26 @@
 
 
 // std imports
-use std::fs::{File};
-use std::io::{BufReader, Read, BufWriter, Write};
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 use byteorder::{LittleEndian,  ReadBytesExt, WriteBytesExt};
 
 // Local imports
-use crate::fittypes::{ FitFileContext, FitFileHeader};
+use crate::fittypes::{FitFileContext, FitFileHeader, Endianness};
 use crate::fitcrc;
-
+use crate::fitread::{fit_read_u8, fit_read_u16};
+use crate::fitwrite::{fit_write_u8, fit_write_u16};
 
 pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Result< Arc<FitFileHeader>, std::io::Error> {
 
     let mut header_buf: [u8; 12] = [0; 12];
-    reader.read_exact(&mut header_buf)?;
 
+    for _i in 0..12 {
+        header_buf[_i] = fit_read_u8(context, reader)?;
+    }
+
+    let header_buf = header_buf;
 
     let mut header_rdr = std::io::Cursor::new(header_buf);
 
@@ -37,7 +41,8 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Re
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
-        header.crc = reader.read_u16::<LittleEndian>().unwrap();
+        context.architecture = Some(Endianness::Little);
+        header.crc = fit_read_u16(context, reader)?;
         context.bytes_read += 2;
 
         let actual_crc = fitcrc::compute(&header_buf);
@@ -49,7 +54,7 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Re
 
     if header.header_size as u32 > context.bytes_read {
         while header.header_size as u32 > context.bytes_read {
-            reader.read_u8()?;
+            fit_read_u8(context, reader)?;
         }
     }
     Ok( Arc::new(header) )
@@ -72,15 +77,17 @@ pub fn write_global_header(context: &mut FitFileContext, writer: &mut Write, hea
 
         header_buf.copy_from_slice(header_writer.as_slice());
     }
-    writer.write_all(&header_buf)?;
-
-    context.bytes_written = 12;
+    context.crc.reset();
+    context.bytes_written = 0;
+    context.architecture = Some(Endianness::Little);
+    for _i in 0..12 {
+        fit_write_u8(context, writer, header_buf[_i])?;
+    }
 
     // CRC is not present in older FIT formats.
     if header.header_size >= 14 {
         let crc = fitcrc::compute(&header_buf);
-        writer.write_u16::<LittleEndian>(crc)?;
-        context.bytes_written += 2;
+        fit_write_u16(context, writer, crc)?;
     }
 
     if header.header_size as u32 > 14 {

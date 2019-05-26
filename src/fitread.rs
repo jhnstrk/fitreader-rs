@@ -1,4 +1,4 @@
-use std::io::{BufReader, Read};
+use std::io::Read;
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
 

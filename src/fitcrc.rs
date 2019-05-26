@@ -20,6 +20,8 @@ impl FitCrc{
     }
 
     pub fn digest(&self) -> u16 {self.crc}
+
+    pub fn reset(&mut self) { self.crc = 0; }
 }
 
 pub fn compute(data: &[u8]) -> u16 {
@@ -96,6 +98,7 @@ mod tests {
         let crc1 = settings_fit.pop().unwrap();
         let crc2 = settings_fit.pop().unwrap();
         let settings_crc = (crc2 as u16) | ((crc1 as u16) << 8);
+        println!("Length: {} crc: {:x}", settings_fit.len(), settings_crc);
         assert_eq!(settings_crc, compute(&settings_fit[..]));
     }
 }

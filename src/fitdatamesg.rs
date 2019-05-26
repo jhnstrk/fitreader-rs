@@ -1,6 +1,5 @@
 
 // std imports
-use std::fs::{File};
 use std::io::{Read, Write};
 use std::sync::Arc;
 
@@ -21,7 +20,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
         }.clone();
 
     let mut mesg = FitDataMessage{
-        global_message_num: defn_mesg.global_message_number,
+        global_message_number: defn_mesg.global_message_number,
         local_message_type,
         timestamp,
         ..Default::default()

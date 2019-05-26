@@ -34,10 +34,9 @@ impl<R: Read> FitFileReader<R> {
         return FitFileReader{source};
     }
 
-    pub fn read_all() -> std::io::Result<FitFile>  {
-        //TOOD
-        return Ok(FitFile::new());
-    }
+//    pub fn read_all(source: R) -> std::io::Result<FitFile>  {
+//        return read_file_read(&mut self.source);
+//    }
 }
 
 
@@ -150,16 +149,54 @@ pub fn read_file(path: &str) -> std::io::Result<FitFile> {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use crate::fittypes::{FitFieldData};
 
     #[test]
-    fn test_read() {
-        // Take a sample fit file, last 2 bytes are the 16-bit crc in LittleEndian.
-        // Pop them off, compare the computed CRC.
+    fn test_read_settings() {
         // The sample file is settings.fit from the FitSDKRelease_20.90.00
         let settings_fit = base64::decode(
             "DBBHAEQAAAAuRklUQAABAAAEAQKEAgKEAwSMAAEAAAABA9wAAeJAA\
                    kAAAQADBQQChAEBAAIBAgMBAgUBAAADhAEcvgBAAAEABAEBAosAAGQ5UA==").unwrap();
 
-//        let file_data = FitFile::read(settings_fit);
+        let file_read = read_file_read(&mut settings_fit.as_slice());
+        assert!(file_read.is_ok());
+
+        let file_data = file_read.unwrap();
+        assert_eq!(68, file_data.header.data_size);
+        assert_eq!(6, file_data.records.len() );
+
+        match &file_data.records[0] {
+            FitRecord::DefinitionMessage(x) => {
+                assert_eq!(0, x.local_message_type);
+                assert_eq!(0, x.global_message_number); //file_id
+                assert_eq!(4, x.field_defns.len());
+            },
+            _ => {assert!(false)},
+        }
+
+        match &file_data.records[3] {
+            FitRecord::DataRecord(x) => {
+                assert_eq!(0, x.local_message_type);
+                assert_eq!(3, x.global_message_number); //user_profile
+                assert_eq!(5, x.fields.len());
+                assert_eq!(4, x.fields[0].field_defn_num); //weight
+                match &x.fields[0].data {
+                    FitFieldData::FitUint16(x) => {
+                        assert_eq!(1, x.len());
+                        assert_eq!(900, x[0]);   // 90.0kg, scale factor 10.
+                    },
+                    _ => {assert!(false)},
+                }
+                assert_eq!(3, x.fields[3].field_defn_num); //weight
+                match &x.fields[3].data {
+                    FitFieldData::FitUint8(x) => {
+                        assert_eq!(1, x.len());
+                        assert_eq!(190, x[0]);   // 1.9m, scale factor 100.
+                    },
+                    _ => {assert!(false)},
+                }
+            },
+            _ => {assert!(false)},
+        }
     }
 }
