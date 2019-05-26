@@ -4,6 +4,8 @@ use crate::fitcrc::{FitCrc};
 use std::sync::Arc;
 use std::collections::HashMap;
 
+pub const INVALID_U32: u32 = 0xFFFFFFFF;
+
 #[derive(Copy, Clone, Default)]
 #[derive(Debug)]
 pub struct FitFileHeader {

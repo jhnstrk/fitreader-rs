@@ -1,7 +1,4 @@
-use std::io::{BufReader, Read, BufWriter, Write, Seek};
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::env;
+use std::io::{BufReader, Read};
 
 use byteorder::{LittleEndian, BigEndian,  ReadBytesExt};
 use std::fs::File;
