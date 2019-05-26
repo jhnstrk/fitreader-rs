@@ -1,7 +1,7 @@
 
 // std imports
 use std::fs::{File};
-use std::io::{BufReader, BufWriter};
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 use crate::fittypes::{FitFieldData, FitDataMessage, FitDataField, fit_data_size, FitFileContext};
@@ -9,7 +9,7 @@ use crate::fitwrite::{fit_write_u8};
 
 use crate::fitfield::{read_fit_field, write_fit_field};
 
-pub fn read_data_message( context: &mut FitFileContext, reader: &mut BufReader<File>,
+pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
                       local_message_type: u8, timestamp: Option<u32>) -> Result< Arc<FitDataMessage>, std::io::Error> {
 
     println!("Data message, local ID: {:} at byte {:}", local_message_type, context.bytes_read);
@@ -76,7 +76,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut BufReader<F
     Ok( Arc::new(mesg) )
 }
 
-pub fn write_data_message( context: &mut FitFileContext, writer: &mut BufWriter<File>, mesg: &FitDataMessage)
+pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mesg: &FitDataMessage)
                        -> Result< (), std::io::Error>
 {
     let is_compressed = mesg.timestamp.is_some();

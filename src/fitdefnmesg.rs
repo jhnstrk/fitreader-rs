@@ -1,7 +1,6 @@
 
 // std imports
-use std::fs::{File};
-use std::io::{BufReader, BufWriter};
+use std::io::{Read, Write};
 use std::sync::Arc;
 
 use crate::fittypes::{ Endianness, FitFileContext,
@@ -13,7 +12,7 @@ use crate::fitread::{fit_read_u8, fit_read_u16};
 use crate::fitwrite::{fit_write_u8, fit_write_u16};
 
 
-fn read_field_defn( context: &mut FitFileContext, reader: &mut BufReader<File>)
+fn read_field_defn( context: &mut FitFileContext, reader: &mut Read)
                     -> Result< Arc<FitFieldDefinition>, std::io::Error> {
     let field_defn_num = fit_read_u8(context, reader)?;
     if field_defn_num == 0xFF {
@@ -40,7 +39,7 @@ fn read_field_defn( context: &mut FitFileContext, reader: &mut BufReader<File>)
     Ok( Arc::new(field_defn) )
 }
 
-fn write_field_defn( context: &mut FitFileContext, writer: &mut BufWriter<File>, field_defn: &FitFieldDefinition )
+fn write_field_defn( context: &mut FitFileContext, writer: &mut Write, field_defn: &FitFieldDefinition )
                      -> Result< (), std::io::Error>
 {
     let base_type_num = fit_data_type_to_int(&field_defn.data_type.unwrap() )?;
@@ -55,7 +54,7 @@ fn write_field_defn( context: &mut FitFileContext, writer: &mut BufWriter<File>,
 }
 
 
-fn read_dev_field_defn( context: &mut FitFileContext, reader: &mut BufReader<File>)
+fn read_dev_field_defn( context: &mut FitFileContext, reader: &mut Read)
                         -> Result< Arc<FitDeveloperFieldDefinition>, std::io::Error> {
     let field_defn_num = fit_read_u8(context, reader)?;
     let size_in_bytes = fit_read_u8(context, reader)?;
@@ -68,7 +67,7 @@ fn read_dev_field_defn( context: &mut FitFileContext, reader: &mut BufReader<Fil
     Ok(Arc::new(field_defn))
 }
 
-fn write_dev_field_defn( context: &mut FitFileContext, writer: &mut BufWriter<File>, field_defn: &FitDeveloperFieldDefinition )
+fn write_dev_field_defn( context: &mut FitFileContext, writer: &mut Write, field_defn: &FitDeveloperFieldDefinition )
                          -> Result< (), std::io::Error>
 {
     fit_write_u8(context, writer, field_defn.field_defn_num)?;
@@ -77,7 +76,7 @@ fn write_dev_field_defn( context: &mut FitFileContext, writer: &mut BufWriter<Fi
     Ok( () )
 }
 
-pub fn read_definition_message( context: &mut FitFileContext, reader: &mut BufReader<File>,
+pub fn read_definition_message( context: &mut FitFileContext, reader: &mut Read,
                             local_message_type: u8, is_developer: bool)
                             -> Result< Arc<FitDefinitionMessage>, std::io::Error> {
     let _reserved0 = fit_read_u8(context, reader)?;  // Read and discard a reserved byte
@@ -118,7 +117,7 @@ pub fn read_definition_message( context: &mut FitFileContext, reader: &mut BufRe
     Ok(v)
 }
 
-pub fn write_definition_message( context: &mut FitFileContext, writer: &mut BufWriter<File>, defn_mesg: &FitDefinitionMessage)
+pub fn write_definition_message( context: &mut FitFileContext, writer: &mut Write, defn_mesg: &FitDefinitionMessage)
                              -> Result< (), std::io::Error>
 {
     let is_developer = !defn_mesg.dev_field_defns.is_empty();

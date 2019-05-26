@@ -12,7 +12,7 @@ use crate::fittypes::{ FitFileContext, FitFileHeader};
 use crate::fitcrc;
 
 
-pub fn read_global_header(context: &mut FitFileContext, reader: &mut BufReader<File>) -> Result< Arc<FitFileHeader>, std::io::Error> {
+pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Result< Arc<FitFileHeader>, std::io::Error> {
 
     let mut header_buf: [u8; 12] = [0; 12];
     reader.read_exact(&mut header_buf)?;
@@ -55,7 +55,7 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut BufReader<F
     Ok( Arc::new(header) )
 }
 
-pub fn write_global_header(context: &mut FitFileContext, writer: &mut BufWriter<File>, header: &FitFileHeader)
+pub fn write_global_header(context: &mut FitFileContext, writer: &mut Write, header: &FitFileHeader)
                        -> Result< (), std::io::Error>
 {
     let mut header_buf: [u8; 12] = [0; 12];

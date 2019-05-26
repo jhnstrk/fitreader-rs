@@ -1,5 +1,4 @@
-use std::io::{BufReader, BufWriter};
-use std::fs::File;
+use std::io::{Read, Write};
 
 use crate::fittypes::{FitDataType, FitFieldData, FitFileContext};
 use crate::fitread::{fit_read_i8, fit_read_u8, fit_read_u16, fit_read_i16, fit_read_i32,
@@ -9,7 +8,7 @@ use crate::fitwrite::{fit_write_u8, fit_write_u16, fit_write_i8, fit_write_i16,
                       fit_write_i32, fit_write_u32, fit_write_string, fit_write_f32,
                       fit_write_f64, fit_write_u64, fit_write_i64};
 
-pub fn read_fit_field( context: &mut FitFileContext, reader: &mut BufReader<File>,
+pub fn read_fit_field( context: &mut FitFileContext, reader: &mut Read,
                    data_type: FitDataType, count: u8)
                    -> Result< FitFieldData, std::io::Error >
 {
@@ -134,7 +133,7 @@ pub fn read_fit_field( context: &mut FitFileContext, reader: &mut BufReader<File
     }
 }
 
-pub fn write_fit_field(context: &mut FitFileContext, writer: &mut BufWriter<File>, field: &FitFieldData)
+pub fn write_fit_field(context: &mut FitFileContext, writer: &mut Write, field: &FitFieldData)
                    -> Result< (), std::io::Error >
 {
     match field {

@@ -42,14 +42,17 @@ impl<R: Read> FitFileReader<R> {
 
 
 pub fn read_file_filename(path: &str) -> std::io::Result<FitFile> {
+    println!("Opening file: {}", path);
+    let mut file = File::open(path)?;
+
+    return read_file_read(&mut file);
+}
+
+pub fn read_file_read(source: &mut Read) -> std::io::Result<FitFile> {
     let mut my_file: FitFile = FitFile::new();
     let mut context: FitFileContext = Default::default();
 
-    println!("Opening file: {}", path);
-    let file = File::open(path)?;
-
-    let mut reader = BufReader::new(file);
-    println!("Reading header from: {}", path);
+    let mut reader = BufReader::new(source);
     my_file.header = read_global_header(&mut context, &mut reader)?;
 
     // Read data, total file size is header + data + crc

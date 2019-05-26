@@ -1,6 +1,5 @@
 // std imports
-use std::fs::{File};
-use std::io::{BufReader, BufWriter};
+use std::io::{Read, Write};
 
 use serde_json::{Value, Map};
 
@@ -138,7 +137,7 @@ pub fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     println!("{}: {}", name, value);
 }
 
-pub fn read_record(context: &mut FitFileContext, reader: &mut BufReader<File>) -> Result< FitRecord, std::io::Error> {
+pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< FitRecord, std::io::Error> {
     let record_hdr = fit_read_u8(context, reader)?;
     let is_normal_header = (record_hdr & 0x80) == 0;
     let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
@@ -177,7 +176,7 @@ pub fn read_record(context: &mut FitFileContext, reader: &mut BufReader<File>) -
     }
 }
 
-pub fn write_rec(context: &mut FitFileContext, writer: &mut BufWriter<File>, rec: &FitRecord)
+pub fn write_rec(context: &mut FitFileContext, writer: &mut Write, rec: &FitRecord)
              -> Result< (), std::io::Error>
 {
     match rec {
