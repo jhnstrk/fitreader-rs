@@ -2,7 +2,7 @@
 // std imports
 use std::io::{Read, Write};
 
-use crate::fittypes::{FitFieldData, FitDataMessage, FitDataField, fit_data_size, FitFileContext};
+use crate::fittypes::{FitFieldData, FitDataMessage, FitDataField, FitFileContext};
 use crate::fitwrite::{fit_write_u8};
 
 use crate::fitfield::{read_fit_field, write_fit_field};
@@ -27,7 +27,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
 
 
     for field in &defn_mesg.field_defns {
-        let data_size = fit_data_size(field.data_type.unwrap())?;
+        let data_size = field.data_type.unwrap().data_size();
         let count:u8 = match data_size {
             0 => field.size_in_bytes,
             _ => field.size_in_bytes / data_size };
@@ -54,7 +54,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
     context.architecture = Some(defn_mesg.architecture);
 
     for field in &defn_mesg.dev_field_defns {
-        let data_size = fit_data_size(field.data_type.unwrap())?;
+        let data_size = field.data_type.unwrap().data_size();
         let count:u8 = match data_size {
             0 => field.size_in_bytes,
             _ => field.size_in_bytes / data_size };

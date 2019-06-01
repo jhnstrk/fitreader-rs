@@ -6,7 +6,7 @@ use std::sync::Arc;
 use crate::fittypes::{ Endianness, FitFileContext,
                        FitFieldDefinition, FitDeveloperFieldDefinition,
                                    FitDefinitionMessage,
-                                   int_to_fit_data_type, fit_data_type_to_int, fit_data_size};
+                                   FitDataType};
 
 use crate::fitread::{fit_read_u8, fit_read_u16};
 use crate::fitwrite::{fit_write_u8, fit_write_u16};
@@ -29,7 +29,7 @@ fn read_field_defn( context: &mut FitFileContext, reader: &mut Read)
     let base_type_num = base_type & 0x1F;
     //let base_type_is_endian = base_type & 0x80;
 
-    field_defn.data_type = Some(int_to_fit_data_type(base_type_num)?);
+    field_defn.data_type = Some(FitDataType::from_type_id(base_type_num)?);
     if field_defn.data_type.is_none() {
         return Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid field: data type>16"));
     }
@@ -42,8 +42,8 @@ fn read_field_defn( context: &mut FitFileContext, reader: &mut Read)
 fn write_field_defn( context: &mut FitFileContext, writer: &mut Write, field_defn: &FitFieldDefinition )
                      -> Result< (), std::io::Error>
 {
-    let base_type_num = fit_data_type_to_int(&field_defn.data_type.unwrap() )?;
-    let base_type_is_endian = fit_data_size( field_defn.data_type.unwrap() )? > 1;
+    let base_type_num = (field_defn.data_type.unwrap()).type_id();
+    let base_type_is_endian = field_defn.data_type.unwrap().data_size() > 1;
     let base_type = base_type_num | ( if base_type_is_endian {0x80} else {0x00} );
 
     fit_write_u8(context, writer, field_defn.field_defn_num)?;

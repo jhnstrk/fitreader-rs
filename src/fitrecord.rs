@@ -12,7 +12,6 @@ use crate::fitdatamesg;
 use crate::fitdefnmesg;
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use chrono::{Utc};
 use chrono::offset::TimeZone;
 
 fn convert_timestamp(x: Value) -> Value {
@@ -38,11 +37,10 @@ fn convert_timestamp(x: Value) -> Value {
 }
 
 fn handle_fit_enum_value( x: Value, type_name: &str, p: &ProfileData )-> Value{
-    if (type_name == "date_time") {
+    if type_name == "date_time" {
         return convert_timestamp(x);
     }
     match &x {
-        Value::Null => x,
         Value::Number(v) => {
 
             if let Some(field_value) = v.as_u64() {
@@ -66,7 +64,7 @@ fn handle_fit_enum_value( x: Value, type_name: &str, p: &ProfileData )-> Value{
 }
 
 fn handle_fit_scale_offset( x: Value, scale: &Option<f64>, offset: &Option<f64> )-> Value{
-    if (scale.is_none() && offset.is_none()) {
+    if scale.is_none() && offset.is_none() {
         return x;
     }
 

@@ -49,74 +49,76 @@ pub enum FitFieldData {
     FitSInt64(Vec<i64>), FitUint64(Vec<u64>), FitUint64z(Vec<u64>),
 }
 
-pub fn int_to_fit_data_type(value: u8) -> Result<FitDataType, std::io::Error> {
-    match value {
-        0 => Ok(FitDataType::FitEnum),
-        1 => Ok(FitDataType::FitSint8),
-        2 => Ok(FitDataType::FitUint8),
-        3 => Ok(FitDataType::FitSint16),
-        4 => Ok(FitDataType::FitUint16),
-        5 => Ok(FitDataType::FitSint32),
-        6 => Ok(FitDataType::FitUint32),
-        7 => Ok(FitDataType::FitString),
-        8 => Ok(FitDataType::FitF32),
-        9 => Ok(FitDataType::FitF64),
-        10 => Ok(FitDataType::FitU8z),
-        11 => Ok(FitDataType::FitU16z),
-        12 => Ok(FitDataType::FitU32z),
-        13 => Ok(FitDataType::FitByte),
-        14 => Ok(FitDataType::FitSInt64),
-        15 => Ok(FitDataType::FitUint64),
-        16 => Ok(FitDataType::FitUint64z),
-        _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"))
+impl FitDataType {
+    pub fn from_type_id(value: u8) -> Result<FitDataType, std::io::Error> {
+        match value {
+            0 => Ok(FitDataType::FitEnum),
+            1 => Ok(FitDataType::FitSint8),
+            2 => Ok(FitDataType::FitUint8),
+            3 => Ok(FitDataType::FitSint16),
+            4 => Ok(FitDataType::FitUint16),
+            5 => Ok(FitDataType::FitSint32),
+            6 => Ok(FitDataType::FitUint32),
+            7 => Ok(FitDataType::FitString),
+            8 => Ok(FitDataType::FitF32),
+            9 => Ok(FitDataType::FitF64),
+            10 => Ok(FitDataType::FitU8z),
+            11 => Ok(FitDataType::FitU16z),
+            12 => Ok(FitDataType::FitU32z),
+            13 => Ok(FitDataType::FitByte),
+            14 => Ok(FitDataType::FitSInt64),
+            15 => Ok(FitDataType::FitUint64),
+            16 => Ok(FitDataType::FitUint64z),
+            _ => Err(std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type"))
+        }
+    }
+
+    pub fn type_id(&self) -> u8 {
+        match self {
+            FitDataType::FitEnum => 0,
+            FitDataType::FitSint8 => 1,
+            FitDataType::FitUint8 => 2,
+            FitDataType::FitSint16 => 3,
+            FitDataType::FitUint16 => 4,
+            FitDataType::FitSint32 => 5,
+            FitDataType::FitUint32 => 6,
+            FitDataType::FitString => 7,
+            FitDataType::FitF32 => 8,
+            FitDataType::FitF64 => 9,
+            FitDataType::FitU8z => 10,
+            FitDataType::FitU16z => 11,
+            FitDataType::FitU32z => 12,
+            FitDataType::FitByte => 13,
+            FitDataType::FitSInt64 => 14,
+            FitDataType::FitUint64 => 15,
+            FitDataType::FitUint64z => 16,
+        }
+    }
+
+    pub fn data_size(&self) -> u8 {
+        match self {
+            FitDataType::FitEnum => 1,
+            FitDataType::FitSint8 => 1,
+            FitDataType::FitUint8 => 1,
+            FitDataType::FitSint16 => 2,
+            FitDataType::FitUint16 => 2,
+            FitDataType::FitSint32 => 4,
+            FitDataType::FitUint32 => 4,
+            FitDataType::FitString => 0,
+            FitDataType::FitF32 => 4,
+            FitDataType::FitF64 => 8,
+            FitDataType::FitU8z => 1,
+            FitDataType::FitU16z => 2,
+            FitDataType::FitU32z => 4,
+            FitDataType::FitByte => 1,
+            FitDataType::FitSInt64 => 8,
+            FitDataType::FitUint64 => 8,
+            FitDataType::FitUint64z => 8,
+        }
     }
 }
 
-pub fn fit_data_type_to_int(value: &FitDataType) -> Result<u8, std::io::Error> {
-    match value {
-        FitDataType::FitEnum => Ok(0),
-        FitDataType::FitSint8 => Ok(1),
-        FitDataType::FitUint8 => Ok(2),
-        FitDataType::FitSint16 => Ok(3),
-        FitDataType::FitUint16 => Ok(4),
-        FitDataType::FitSint32 => Ok(5),
-        FitDataType::FitUint32 => Ok(6),
-        FitDataType::FitString => Ok(7),
-        FitDataType::FitF32 => Ok(8),
-        FitDataType::FitF64 => Ok(9),
-        FitDataType::FitU8z => Ok(10),
-        FitDataType::FitU16z => Ok(11),
-        FitDataType::FitU32z => Ok(12),
-        FitDataType::FitByte => Ok(13),
-        FitDataType::FitSInt64 => Ok(14),
-        FitDataType::FitUint64 => Ok(15),
-        FitDataType::FitUint64z => Ok(16),
-        //unreachable _ => Err( std::io::Error::new(std::io::ErrorKind::Other, "Invalid FIT data type")),
-    }
-}
 
-
-pub fn fit_data_size(data_type: FitDataType) -> Result<u8, std::io::Error> {
-    match data_type {
-        FitDataType::FitEnum => Ok(1),
-        FitDataType::FitSint8 => Ok(1),
-        FitDataType::FitUint8 => Ok(1),
-        FitDataType::FitSint16 => Ok(2),
-        FitDataType::FitUint16 => Ok(2),
-        FitDataType::FitSint32 => Ok(4),
-        FitDataType::FitUint32 => Ok(4),
-        FitDataType::FitString => Ok(0),
-        FitDataType::FitF32 => Ok(4),
-        FitDataType::FitF64 => Ok(8),
-        FitDataType::FitU8z => Ok(1),
-        FitDataType::FitU16z => Ok(2),
-        FitDataType::FitU32z => Ok(4),
-        FitDataType::FitByte => Ok(1),
-        FitDataType::FitSInt64 => Ok(8),
-        FitDataType::FitUint64 => Ok(8),
-        FitDataType::FitUint64z => Ok(8),
-    }
-}
 
 #[derive(Clone, Debug, Default)]
 pub struct FitFieldDefinition{
