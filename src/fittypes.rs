@@ -1,6 +1,8 @@
 
 use crate::fitcrc::{FitCrc};
 
+use chrono::{DateTime, TimeZone, Utc};
+
 use std::sync::Arc;
 use std::collections::HashMap;
 
@@ -183,4 +185,7 @@ pub enum FitRecord {
     EndOfFile(u16),
 }
 
+pub fn base_datetime() -> DateTime<Utc> {
+    Utc.ymd(1989, 12, 31).and_hms(0, 0, 0)
+}
 

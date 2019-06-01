@@ -3,18 +3,44 @@ use std::io::{Read, Write};
 
 use serde_json::{Value, Map};
 
-use crate::fittypes::{ Endianness, FitFileContext,
-                       FitFieldData, FitRecord,
-                        INVALID_U32};
+use crate::fittypes::{Endianness, FitFileContext, FitFieldData, FitRecord, INVALID_U32, base_datetime};
 use crate::fitread::{fit_read_u8};
 
 use crate::profile::ProfileData;
 use crate::fitheader;
 use crate::fitdatamesg;
 use crate::fitdefnmesg;
+
 use byteorder::{LittleEndian, WriteBytesExt};
+use chrono::{Utc};
+use chrono::offset::TimeZone;
+
+fn convert_timestamp(x: Value) -> Value {
+    match &x {
+        Value::Number(v) => {
+
+            if let Some(field_value) = v.as_i64() {
+                let utc_dt = base_datetime() + chrono::Duration::seconds(field_value);
+                Value::from( utc_dt.to_rfc3339() )
+            } else {
+                x
+            }
+        }
+        Value::Array(xa) => {
+            let mut ret = Vec::new();
+            for v in xa {
+                ret.push(convert_timestamp(x.clone()));
+            }
+            Value::from(ret)
+        },
+        _ => x,
+    }
+}
 
 fn handle_fit_enum_value( x: Value, type_name: &str, p: &ProfileData )-> Value{
+    if (type_name == "date_time") {
+        return convert_timestamp(x);
+    }
     match &x {
         Value::Null => x,
         Value::Number(v) => {
@@ -80,6 +106,8 @@ fn handle_fit_units( x: Value, units: &str )-> Value {
         x
     }
 }
+
+
 fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     where Value: std::convert::From<T> + std::convert::From< Vec<T> >
 {
