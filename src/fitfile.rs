@@ -222,6 +222,21 @@ mod tests {
             .unwrap()
     }
 
+    fn get_activity_fit() -> Vec<u8> {
+        base64::decode("DBBkAPUCAAAuRklUQAABAAAFAwSMBASGAQKEAgKEAAEAAH////8p5gcSAA8AAQRAAAEAMQIAAoQ\
+        BAQJAAAEAMQEAAoQAAPBBAAEAFQX9BIYDBIYAAQABAQAEAQJBAAEAFQX9BIYDAQAAAQABAQAEAQIBKeYHEgAAAABCAA\
+        EAFAb9BIYABIUBBIUFBIYCAoQGAoQCKeYHEh2FYS7L+7SXAAAAAg8zAAACKeYHEx2FYS7L+7SYAAAAAg8zAAACKeYHF\
+        B2FYS7L+7SYAAAAAg8zAAACKeYHFR2FYTnL+7SCAAAAFQ8zAAACKeYHFh2FYUDL+7R5AAAAHA8zAAACKeYHFx2FYUbL\
+        +7RyAAAAIw8zAAACKeYHGB2FYUrL+7RsAAAAKQ8zAAACKeYHGR2FYXfL+7QUAAAAcg8zAAACKeYHGh2FYY3L+7O0AAA\
+        AuQ8zAFwCKeYHGx2FYa7L+7M8AAABEw8zAJgCKeYHHB2FYczL+7LXAAABXw8zANECKeYHHR2FYarL+7J5AAABpg8zAQ\
+        YCKeYHHh2FYV/L+7KNAAAB7Q8zATMCKeYHHx2FYRLL+7JXAAACPQ8zAXABKeYHHwAABABDAAEAExT9BIYCBIYDBIUEB\
+        IUFBIUGBIUHBIYIBIYJBIb+AoQLAoQMAoQNAoQOAoQVAoQWAoQAAQABAQAYAQAZAQADKeYHoynmBxIdhWEuy/u0lx2F\
+        YRLL+7JXAAA1tQAANbUAAAI9AAAAAAAAAaEBcAAAAAAJAQcBQQABABUF/QSGAwSGAAEAAQEABAECASnmB6MAAAABCAk\
+        BRAABABIV/QSGAgSGAwSFBASFBwSGCASGCQSG/gKECwKEDQKEDgKEDwKEFgKEFwKEGQKEGgKEAAEAAQEABQEABgEAHA\
+        EABCnmB6Mp5gcSHYVhLsv7tJcAADW1AAA1tQAAAj0AAAAAAAABoQFwAAAAAAAAAAEJAQEAAEUAAQAiB/0EhgAEhgUEh\
+        gEChAIBAAMBAAQBAAUp5gejAAA1tSnlz2MAAQAaAdWh").unwrap()
+    }
+
     #[test]
     fn test_read_settings() {
         let settings_fit = get_settings_fit();
@@ -270,7 +285,7 @@ mod tests {
     #[test]
     fn test_read_write() -> Result<(), std::io::Error> {
         let settings_fit = get_settings_fit();
-        let mut in_cursor = Cursor::new(get_settings_fit());
+        let mut in_cursor = Cursor::new(settings_fit.clone());
 
         let mut reader = FitFileReader::new(&mut in_cursor);
         let out_cursor = Cursor::new(Vec::new());
@@ -302,8 +317,8 @@ mod tests {
     fn test_dump_settings() -> Result<(), std::io::Error> {
         let pf =  profile::build_profile().unwrap();
 
-        let settings_fit = get_settings_fit();
-        let mut in_cursor = Cursor::new(get_settings_fit());
+        let settings_fit = get_activity_fit(); // get_settings_fit();
+        let mut in_cursor = Cursor::new(settings_fit);
 
         let mut reader = FitFileReader::new(&mut in_cursor);
         let header = reader.read_global_header()?;

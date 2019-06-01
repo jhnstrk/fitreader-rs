@@ -10,7 +10,7 @@ use crate::fitfield::{read_fit_field, write_fit_field};
 pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
                       local_message_type: u8, timestamp: Option<u32>) -> Result< FitDataMessage, std::io::Error> {
 
-    println!("Data message, local ID: {:} at byte {:}", local_message_type, context.data_bytes_read);
+    debug!("Data message, local ID: {:} at byte {:}", local_message_type, context.data_bytes_read);
 
     let defn_mesg=
         match context.field_definitions.get(&local_message_type) {
@@ -40,7 +40,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
         if field.field_defn_num == 253 {
             match field_value_data.clone() {
                 FitFieldData::FitUint32(value) => context.timestamp = value[0],
-                _ => println!("Warning, bad timestamp type")
+                _ => warn!("Warning, bad timestamp type")
             }
         }
 
@@ -69,7 +69,7 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
     }
 
 
-    println!("Data message: {:?}", mesg);
+    debug!("Data message: {:?}", mesg);
 
     Ok(mesg)
 }
@@ -86,7 +86,7 @@ pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mes
         assert!((prev_time_stamp & 0xFFFFFFE0) < new_timestamp);
 
         if (new_timestamp - prev_time_stamp) > 0x1f {
-            println!("Warning: compressed timestamp overflow");
+            warn!("Warning: compressed timestamp overflow");
         }
         let time_offset = (new_timestamp & 0x1F) as u8;
 
@@ -100,7 +100,7 @@ pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mes
 
     let defn = context.field_definitions.get(&mesg.local_message_type);
     match defn {
-        None => {println!("Using defaults");},
+        None => {debug!("Using defaults");},
         Some(x) => {context.architecture = Some(x.architecture);},
     }
     for field in &mesg.fields {
@@ -110,7 +110,7 @@ pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mes
         if field.field_defn_num == 253 {
             match &field.data {
                 FitFieldData::FitUint32(value) => context.timestamp = value[0],
-                _ => println!("Warning, bad timestamp type")
+                _ => warn!("Warning, bad timestamp type")
             }
         }
     }

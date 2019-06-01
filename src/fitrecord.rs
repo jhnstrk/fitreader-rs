@@ -73,6 +73,13 @@ fn handle_fit_scale_offset( x: Value, scale: &Option<f64>, offset: &Option<f64> 
     }
 }
 
+fn handle_fit_units( x: Value, units: &str )-> Value {
+    if (units == "semicircles") {
+        handle_fit_scale_offset(x, &Some(1.0e7), &None)
+    } else {
+        x
+    }
+}
 fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     where Value: std::convert::From<T> + std::convert::From< Vec<T> >
 {
@@ -144,19 +151,19 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                         FitFieldData::FitUint64z(x) => handle_fit_value(x),
                     };
 
-                match field_type {
-                    Some(ft) => {
-                        value = handle_fit_enum_value(value, &ft, pf)
-                    },
-                    None =>  {},
+                if let Some(ft) = field_type {
+                    value = handle_fit_enum_value(value, &ft, pf)
                 }
                 value = handle_fit_scale_offset(value,  &field_scale, &field_offset );
+
                 let mut field_map = Map::new();
                 field_map.insert("name".to_string(), Value::from(field_name));
-                field_map.insert("value".to_string(), value);
-                if field_units.is_some() {
-                    field_map.insert("units".to_string(), Value::from(field_units.unwrap()));
+                if let Some(field_units_str) = field_units {
+                    value = handle_fit_units( value, &field_units_str );
+                    field_map.insert("units".to_string(), Value::from(field_units_str));
                 }
+                field_map.insert("value".to_string(), value);
+
                 field_vec.push(Value::from(field_map));
             }
             let message_name = if message.is_some() {
@@ -239,7 +246,7 @@ pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< F
         }
     } else {
         // Compressed timestamp header
-        println!("Compressed message");
+        debug!("Compressed message");
         let local_message_type = (record_hdr >> 5) & 0x03;
         let time_offset = (record_hdr & 0x1F) as u32;
 

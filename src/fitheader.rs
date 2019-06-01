@@ -45,7 +45,7 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> st
         context.data_bytes_read += 2;
 
         let actual_crc = fitcrc::compute(&header_buf);
-        //println!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
+        //debug!("Actual: {} Expected: {}", actual_crc, my_file.header.crc);
         if (header.crc != 0) && (actual_crc != header.crc) {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header CRC is invalid"));
         }

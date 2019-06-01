@@ -89,7 +89,7 @@ pub fn read_definition_message( context: &mut FitFileContext, reader: &mut Read,
     let global_message_number = fit_read_u16(context, reader)?;
     let number_of_fields = fit_read_u8(context, reader)?;
 
-    println!("Definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
+    debug!("Definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
              local_message_type, global_message_number, number_of_fields, context.data_bytes_read);
 
     let mut defn_mesg = FitDefinitionMessage {
@@ -101,7 +101,7 @@ pub fn read_definition_message( context: &mut FitFileContext, reader: &mut Read,
 
     for _ifield in 0..number_of_fields {
         defn_mesg.field_defns.push( read_field_defn(context, reader)? );
-        println!("Field {}: {:?}", _ifield, defn_mesg.field_defns.last().unwrap());
+        debug!("Field {}: {:?}", _ifield, defn_mesg.field_defns.last().unwrap());
     }
 
     if is_developer {
@@ -139,7 +139,7 @@ pub fn write_definition_message( context: &mut FitFileContext, writer: &mut Writ
     fit_write_u16(context, writer, defn_mesg.global_message_number)?;
     fit_write_u8(context, writer, defn_mesg.field_defns.len() as u8)?;
 
-    println!("Writing definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
+    debug!("Writing definition message: Local ID: {:}, Global ID = {:}, Num. of fields: {}, offset {}",
              defn_mesg.local_message_type, defn_mesg.global_message_number,
              defn_mesg.field_defns.len(), context.data_bytes_written);
 
