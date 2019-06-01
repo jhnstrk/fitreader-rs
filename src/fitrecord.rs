@@ -14,17 +14,62 @@ use crate::fitdatamesg;
 use crate::fitdefnmesg;
 use byteorder::{LittleEndian, WriteBytesExt};
 
-fn handle_fit_enum_value( x: &Vec<u8>, type_name: &str, p: &ProfileData )-> Value{
-    if x.is_empty() {
-        return Value::Null;
-    } else if x.len() == 1 {
-        let field_value = x[0] as u32;
-        return match p.value_name(type_name, field_value) {
-            None => { Value::from(x[0].clone() ) },
-            Some(str) => {Value::from(str)},
-        };
-    } else {
-        return (x.clone()).into();
+fn handle_fit_enum_value( x: Value, type_name: &str, p: &ProfileData )-> Value{
+    match &x {
+        Value::Null => x,
+        Value::Number(v) => {
+
+            if let Some(field_value) = v.as_u64() {
+                match p.value_name(type_name, field_value as u32) {
+                    None => { x },
+                    Some(str) => { Value::from(str) },
+                }
+            } else {
+                x
+            }
+        }
+        Value::Array(xa) => {
+            let mut ret = Vec::new();
+            for v in xa {
+                ret.push(handle_fit_enum_value(v.clone(), type_name, p));
+            }
+            Value::from(ret)
+        },
+        _ => x,
+    }
+}
+
+fn handle_fit_scale_offset( x: Value, scale: &Option<f64>, offset: &Option<f64> )-> Value{
+    if (scale.is_none() && offset.is_none()) {
+        return x;
+    }
+
+    match x {
+        Value::Null => x,
+        Value::Number(v) => {
+
+            if let Some(field_value) = v.as_f64() {
+                let mut value_copy = field_value;
+                if let Some(offset_f) = offset {
+                    value_copy = value_copy - offset_f;
+                }
+                if let Some(scale_f) = scale {
+                    value_copy = value_copy / scale_f;
+                }
+
+                Value::from(value_copy)
+            } else {
+                Value::Number(v)
+            }
+        }
+        Value::Array(xa) => {
+            let mut ret = Vec::new();
+            for v in xa {
+                ret.push(handle_fit_scale_offset(v, scale, offset));
+            }
+            Value::from(ret)
+        },
+        _ => x,
     }
 }
 
@@ -63,6 +108,8 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 let mut field_units = None;
                 let mut field_desc = None;
                 let mut field_type = None;
+                let mut field_scale = None;
+                let mut field_offset = None;
                 if message.is_some() {
                     field_desc = message.unwrap().find_field(ifield.field_defn_num);
                 }
@@ -70,18 +117,15 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                     field_name = field_desc.unwrap().field_name.clone();
                     field_units = field_desc.unwrap().units.clone();
                     field_type = Some(field_desc.unwrap().field_type.clone());
+                    field_scale = field_desc.unwrap().scale.clone();
+                    field_offset = field_desc.unwrap().offset.clone();
                 } else {
                     let field_string = format!("Field_{}", ifield.field_defn_num);
                     field_name = field_string;
                 }
-                let value =
+                let mut value =
                     match &ifield.data {
-                        FitFieldData::FitEnum(x) => {
-                            match field_type {
-                                Some(ft) => handle_fit_enum_value(x, &ft, pf),
-                                None => handle_fit_value(x),
-                            }
-                        },
+                        FitFieldData::FitEnum(x)  => handle_fit_value(x),
                         FitFieldData::FitSint8(x) => handle_fit_value(x),
                         FitFieldData::FitUint8(x) => handle_fit_value(x),
                         FitFieldData::FitSint16(x) => handle_fit_value(x),
@@ -99,6 +143,14 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                         FitFieldData::FitUint64(x) => handle_fit_value(x),
                         FitFieldData::FitUint64z(x) => handle_fit_value(x),
                     };
+
+                match field_type {
+                    Some(ft) => {
+                        value = handle_fit_enum_value(value, &ft, pf)
+                    },
+                    None =>  {},
+                }
+                value = handle_fit_scale_offset(value,  &field_scale, &field_offset );
                 let mut field_map = Map::new();
                 field_map.insert("name".to_string(), Value::from(field_name));
                 field_map.insert("value".to_string(), value);

@@ -18,42 +18,10 @@ pub struct ProfileField {
 
 #[derive(Deserialize)]
 #[derive(Clone, Debug, Default)]
-pub struct ProfileTypeJson {
-    pub base_type: String,
-    pub type_name: String,
-    pub values: Vec<Value>,
-}
-
-#[serde(from = "ProfileTypeJson")]
-#[derive(Deserialize)]
-#[derive(Clone, Debug, Default)]
 pub struct ProfileType {
     pub base_type: String,
     pub type_name: String,
     pub values: HashMap<String,u32>,
-}
-
-impl From<ProfileTypeJson> for ProfileType {
-    fn from(v: ProfileTypeJson) -> Self {
-        let mut values: HashMap<String,u32>  = HashMap::new();
-        for item in &v.values {
-            match item {
-                Value::Object( map) => {
-                    for (k,v) in map {
-                        if let Some(xv) = v.as_u64() {
-                            values.insert(k.clone(), xv as u32);
-                        }
-                    }
-                }
-                _ => {println!("Bad type");}
-            }
-        }
-        return Self {
-            base_type: v.base_type,
-            type_name: v.type_name,
-            values,
-        };
-    }
 }
 
 #[derive(Deserialize)]
