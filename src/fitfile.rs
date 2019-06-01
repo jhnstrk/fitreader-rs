@@ -136,7 +136,10 @@ pub fn read_file_read(source: &mut Read) -> std::io::Result<FitFile> {
 pub fn read_file(path: &str) -> std::io::Result<FitFile> {
     let mut my_file: FitFile = FitFile::new();
     let mut context: FitFileContext = Default::default();
-    let p = profile::build_profile()?;
+    let p = match profile::build_profile(){
+        Ok(p) => {p},
+        Err(e) => {return Err(std::io::Error::new(std::io::ErrorKind::Other, e));},
+    };
 
     println!("Opening file: {}", path);
     let file = File::open(path)?;
@@ -267,7 +270,7 @@ mod tests {
     #[test]
     fn test_read_write() -> Result<(), std::io::Error> {
         let settings_fit = get_settings_fit();
-        let mut in_cursor = Cursor::new( get_settings_fit() );
+        let mut in_cursor = Cursor::new(get_settings_fit());
 
         let mut reader = FitFileReader::new(&mut in_cursor);
         let out_cursor = Cursor::new(Vec::new());
@@ -277,13 +280,13 @@ mod tests {
 
         loop {
             let field = reader.read_next()?;
-            match field{
-                FitRecord::HeaderRecord(_) => {panic!("BAD header record");},
+            match field {
+                FitRecord::HeaderRecord(_) => { panic!("BAD header record"); },
                 FitRecord::DataRecord(_) |
                 FitRecord::DefinitionMessage(_) => {
                     writer.write_next(&field)?;
                 },
-                FitRecord::EndOfFile(_) => {break;},
+                FitRecord::EndOfFile(_) => { break; },
             }
         }
         writer.finalize()?;
@@ -293,5 +296,32 @@ mod tests {
         assert_eq!(settings_fit.len(), buf.len());
         assert_eq!(settings_fit, buf);
         Ok(())
+    }
+
+    #[test]
+    fn test_dump_settings() -> Result<(), std::io::Error> {
+        let pf =  profile::build_profile().unwrap();
+
+        let settings_fit = get_settings_fit();
+        let mut in_cursor = Cursor::new(get_settings_fit());
+
+        let mut reader = FitFileReader::new(&mut in_cursor);
+        let header = reader.read_global_header()?;
+
+        print_rec(&FitRecord::HeaderRecord(header), &pf);
+
+        loop {
+            let field = reader.read_next()?;
+            match field {
+                FitRecord::HeaderRecord(_) |
+                FitRecord::DataRecord(_) |
+                FitRecord::DefinitionMessage(_) => {
+                    print_rec(&field, &pf);
+                },
+                FitRecord::EndOfFile(_) => { break; },
+            }
+        }
+
+        panic!("ASD");
     }
 }

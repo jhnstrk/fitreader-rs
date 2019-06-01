@@ -14,6 +14,20 @@ use crate::fitdatamesg;
 use crate::fitdefnmesg;
 use byteorder::{LittleEndian, WriteBytesExt};
 
+fn handle_fit_enum_value( x: &Vec<u8>, type_name: &str, p: &ProfileData )-> Value{
+    if x.is_empty() {
+        return Value::Null;
+    } else if x.len() == 1 {
+        let field_value = x[0] as u32;
+        return match p.value_name(type_name, field_value) {
+            None => { Value::from(x[0].clone() ) },
+            Some(str) => {Value::from(str)},
+        };
+    } else {
+        return (x.clone()).into();
+    }
+}
+
 fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     where Value: std::convert::From<T> + std::convert::From< Vec<T> >
 {
@@ -48,19 +62,26 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 let field_name: String;
                 let mut field_units = None;
                 let mut field_desc = None;
+                let mut field_type = None;
                 if message.is_some() {
                     field_desc = message.unwrap().find_field(ifield.field_defn_num);
                 }
                 if field_desc.is_some() {
                     field_name = field_desc.unwrap().field_name.clone();
                     field_units = field_desc.unwrap().units.clone();
+                    field_type = Some(field_desc.unwrap().field_type.clone());
                 } else {
                     let field_string = format!("Field_{}", ifield.field_defn_num);
                     field_name = field_string;
                 }
                 let value =
                     match &ifield.data {
-                        FitFieldData::FitEnum(x) => handle_fit_value(x),
+                        FitFieldData::FitEnum(x) => {
+                            match field_type {
+                                Some(ft) => handle_fit_enum_value(x, &ft, pf),
+                                None => handle_fit_value(x),
+                            }
+                        },
                         FitFieldData::FitSint8(x) => handle_fit_value(x),
                         FitFieldData::FitUint8(x) => handle_fit_value(x),
                         FitFieldData::FitSint16(x) => handle_fit_value(x),

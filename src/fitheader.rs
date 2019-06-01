@@ -11,7 +11,7 @@ use crate::fitcrc;
 use crate::fitread::{fit_read_u8, fit_read_u16};
 use crate::fitwrite::{fit_write_u8, fit_write_u16};
 
-pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> Result< FitFileHeader, std::io::Error> {
+pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> std::io::Result< FitFileHeader > {
 
     let mut header_buf: [u8; 12] = [0; 12];
 
