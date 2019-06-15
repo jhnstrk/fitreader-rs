@@ -1,8 +1,5 @@
 
-use serde_json::{Value};
 use std::collections::HashMap;
-
-use crate::fittypes::FitDataType;
 
 #[derive(Deserialize)]
 #[derive(Clone, Debug, Default)]
@@ -35,7 +32,6 @@ pub struct ProfileMessage {
 pub struct ProfileData {
     message_map: HashMap<u16, ProfileMessage>,
     type_map: HashMap<String, ProfileType>,
-    base_types: HashMap<String, FitDataType>,
 }
 
 pub fn build_profile() -> Result<ProfileData, String> {
@@ -65,26 +61,7 @@ pub fn build_profile() -> Result<ProfileData, String> {
         type_map.insert(item.type_name.clone(), item.clone());
     }
 
-    let mut base_types: HashMap<String, FitDataType> = HashMap::new();
-    base_types.insert("enum".to_string(), FitDataType::FitEnum);
-    base_types.insert("sint8".to_string(), FitDataType::FitSint8);
-    base_types.insert("uint8".to_string(), FitDataType::FitUint8);
-    base_types.insert("sint16".to_string(), FitDataType::FitSint16);
-    base_types.insert("uint16".to_string(), FitDataType::FitUint16);
-    base_types.insert("sint32".to_string(), FitDataType::FitSint32);
-    base_types.insert("uint32".to_string(), FitDataType::FitUint32);
-    base_types.insert("string".to_string(), FitDataType::FitString);
-    base_types.insert("f32".to_string(), FitDataType::FitF32);
-    base_types.insert("f64".to_string(), FitDataType::FitF64);
-    base_types.insert("u8z".to_string(), FitDataType::FitU8z);
-    base_types.insert("u16z".to_string(), FitDataType::FitU16z);
-    base_types.insert("u32z".to_string(), FitDataType::FitU32z);
-    base_types.insert("byte".to_string(), FitDataType::FitByte);
-    base_types.insert("sint64".to_string(), FitDataType::FitSInt64);
-    base_types.insert("uint64".to_string(), FitDataType::FitUint64);
-    base_types.insert("uint64z".to_string(), FitDataType::FitUint64z);
-
-    Ok( ProfileData { message_map, type_map, base_types } )
+    Ok( ProfileData { message_map, type_map } )
 }
 
 impl ProfileMessage {

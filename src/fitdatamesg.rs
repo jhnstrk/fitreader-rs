@@ -2,10 +2,13 @@
 // std imports
 use std::io::{Read, Write};
 
-use crate::fittypes::{FitFieldData, FitDataMessage, FitDataField, FitFileContext};
+use crate::fittypes::{FitDataType, FitFieldData, FitDataMessage, FitDataField, FitFileContext,
+                      FitDevDataDescription, FitDevDataField};
 use crate::fitwrite::{fit_write_u8};
 
 use crate::fitfield::{read_fit_field, write_fit_field};
+use std::convert::TryFrom;
+use std::sync::Arc;
 
 pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
                       local_message_type: u8, timestamp: Option<u32>) -> Result< FitDataMessage, std::io::Error> {
@@ -54,24 +57,139 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
     context.architecture = Some(defn_mesg.architecture);
 
     for field in &defn_mesg.dev_field_defns {
-        let data_size = field.data_type.unwrap().data_size();
-        let count:u8 = match data_size {
-            0 => field.size_in_bytes,
-            _ => field.size_in_bytes / data_size };
 
-        let field_value_data = read_fit_field(context, reader,
-                                              field.data_type.unwrap(), count)?;
+        println!("Reading dev field {:?}", context.developer_field_definitions);
+        let desc2 = match context.developer_field_definitions.get(
+            &field.dev_data_index) {
+            None => {None },
+            Some(x) => {Some(x.clone())},
+        };
 
-        let field_value = FitDataField {
-            field_defn_num: field.field_defn_num,
-            data: field_value_data };
-        mesg.fields.push(field_value);
+        if let Some(desc) = desc2
+        {
+            println!("Reading field");
+            let base_type = desc.base_type.unwrap();
+            let data_size = base_type.data_size();
+            let count:u8 = match data_size {
+                0 => field.size_in_bytes,
+                _ => field.size_in_bytes / data_size };
+
+            let field_value_data = read_fit_field(context, reader,
+                                                  base_type, count)?;
+
+            let field_value = FitDevDataField {
+                field_defn_num: field.field_defn_num,
+                data: field_value_data,
+                description: desc.clone(),
+            };
+            mesg.dev_fields.push(field_value);
+        } else {
+            // Field description not found. Load as bytes.
+            println!("Unknown dev field index={} defn_num={}", field.dev_data_index, field.field_defn_num);
+            let defn_num = field.field_defn_num;
+            let base_type = FitDataType::FitByte;
+            let data_size = 1_u8;
+            let count = data_size;
+            let field_value_data = read_fit_field(context, reader,
+                                                  base_type, count)?;
+
+            let desc = format!("developer_field_{}", defn_num);
+
+        }
     }
 
 
     debug!("Data message: {:?}", mesg);
 
+    const FIELD_DESCRIPTION: u16 = 206;
+
+    if defn_mesg.global_message_number == FIELD_DESCRIPTION {
+        add_dev_field_description( context, &mesg );
+    }
+
     Ok(mesg)
+}
+
+fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessage )
+{
+    // ARRAY = 4,
+    // 5	components
+    //9	bits
+    //10	accumulate
+    //13	fit_base_unit_id
+    //14	native_mesg_num
+    //15	native_field_num
+
+    let mut has_field_defn = false;
+
+    const DEV_DATA_INDEX: u8 = 0;
+
+    let mut dev_data_desc: FitDevDataDescription = Default::default();
+    for ifield in &mesg.fields {
+        println!("ifield {:?}",ifield);
+        match ifield.field_defn_num {
+            DEV_DATA_INDEX => { // dev_data_index
+                if let Ok(x) = u8::try_from(&ifield.data) {
+                    dev_data_desc.dev_data_index = x;
+                } else {
+                    warn!("Bad type for dev_data_index");
+                }
+            },
+            1 => { // field_defn_num
+                println!("field_defn_num");
+                if let  Ok(x) = u8::try_from(&ifield.data) {
+                    has_field_defn = true;
+                    dev_data_desc.field_defn_num = x;
+                } else {
+                    warn!("Bad type for field_defn_num");
+                }
+            },
+            2 => { // base_type_id
+                if  let Ok(x) = u8::try_from(&ifield.data) {
+                    dev_data_desc.base_type = Some(FitDataType::from_type_id(x).unwrap());
+                } else {
+                    warn!("Bad type for base_type");
+                }
+            },
+            3 => { // name
+                if let Ok(x) = String::try_from(&ifield.data) {
+                    dev_data_desc.field_name = x.clone();
+                } else {
+                    warn!("Bad type for field_name");
+                }
+            },
+            6 => { // Scale
+                if let Ok(x) = f64::try_from(&ifield.data) {
+                    dev_data_desc.scale = Some(x);
+                } else {
+                    warn!("Bad type for scale");
+                }
+            },
+            7 => { // Offset
+                if let Ok(x) = f64::try_from(&ifield.data) {
+                    dev_data_desc.offset = Some(x);
+                } else {
+                    warn!("Bad type for offset");
+                }
+            },
+            8 => { // units
+                if let Ok(x) = String::try_from(&ifield.data) {
+                    dev_data_desc.units = Some(x.clone());
+                } else {
+                    warn!("Bad type for units");
+                }
+            },
+            _ => {
+                println!("Other value");
+            }
+        }
+    }
+    if has_field_defn {
+        println!("Adding defn num");
+        context.developer_field_definitions.insert(dev_data_desc.field_defn_num, Arc::new(dev_data_desc));
+    } else {
+        println!("Dev field has no defn num");
+    }
 }
 
 pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mesg: &FitDataMessage)

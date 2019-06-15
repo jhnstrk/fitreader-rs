@@ -71,7 +71,7 @@ pub fn check_rec(context: &FitFileContext, rec: &FitRecord)
                         let errstr = format!("Timestamp error: Timestamp is before previous one {}", utc_dt.to_rfc3339());
                         return Err(std::io::Error::new(std::io::ErrorKind::Other, errstr));
                     } else {
-                        println!("Timestamp: {}", utc_dt.to_rfc3339());
+                        //println!("Timestamp: {}", utc_dt.to_rfc3339());
                     }
                 },
             }

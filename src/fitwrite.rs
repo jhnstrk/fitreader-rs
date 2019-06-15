@@ -99,7 +99,7 @@ pub fn fit_write_string(context: &mut FitFileContext, writer: &mut Write, v: &st
     let sz = *width as usize;
     let mut string_bytes = vbytes.len();
     if string_bytes > sz {
-        println!("Warning: String is longer than field width");
+        warn!("Warning: String is longer than field width");
         string_bytes = sz;
     }
     // Write bytes

@@ -46,6 +46,7 @@ impl<R: Read> FitFileReader<R> {
             return Ok(FitRecord::HeaderRecord(
                 read_global_header(&mut self.context, &mut self.source)? ) );
         }
+        println!("Read: {} len: {}", self.context.data_bytes_read , self.data_size.unwrap());
         if self.data_size.is_some() && (self.context.data_bytes_read < self.data_size.unwrap()) {
             return read_record(&mut self.context, &mut self.source);
         } else {
@@ -212,7 +213,8 @@ mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
     use crate::fittypes::{FitFieldData};
-    use std::io::{Cursor};
+    use std::io::{Cursor, SeekFrom};
+    use crate::fitcrc::FitCrc;
 
     /// This sample file is settings.fit from the FitSDKRelease_20.90.00
     fn get_settings_fit() -> Vec<u8> {
@@ -235,6 +237,13 @@ mod tests {
         BRAABABIV/QSGAgSGAwSFBASFBwSGCASGCQSG/gKECwKEDQKEDgKEDwKEFgKEFwKEGQKEGgKEAAEAAQEABQEABgEAHA\
         EABCnmB6Mp5gcSHYVhLsv7tJcAADW1AAA1tQAAAj0AAAAAAAABoQFwAAAAAAAAAAEJAQEAAEUAAQAiB/0EhgAEhgUEh\
         gEChAIBAAMBAAQBAAUp5gejAAA1tSnlz2MAAQAaAdWh").unwrap()
+    }
+
+    // DeveloperData.fit
+    fn get_developer_data_fit() -> Vec<u8> {
+        base64::decode("DiBoBqIAAAAuRklUvtBAAAEAAAQBAoQAAQACAoQDBIwAAA8EIykAAAalQAABAM8CARANAw\
+        ECAAEBAgMFCA0VIjdZkOl5YtsAQAABAM4FAAECAQECAgECAxEHCAoHAAAAAWRvdWdobnV0c19lYXJuZWQAZG91Z2hud\
+        XRzAGAAAQAUBAMBAgQBAgUEhgYChAEAAQAAjFgAAMc4uYABAI9aAAMsgI5AAgCQXAAFqTiKEAPTng=").unwrap()
     }
 
     #[test]
@@ -284,6 +293,7 @@ mod tests {
 
     #[test]
     fn test_read_write() -> Result<(), std::io::Error> {
+        init();
         let settings_fit = get_settings_fit();
         let mut in_cursor = Cursor::new(settings_fit.clone());
 
@@ -313,12 +323,14 @@ mod tests {
         Ok(())
     }
 
-    #[test]
-    fn test_dump_settings() -> Result<(), std::io::Error> {
+    fn dump_file( fit_data: &Vec<u8>) -> Result<(), std::io::Error> {
+        init();
+        println!("Test data: {} bytes", fit_data.len());
         let pf =  profile::build_profile().unwrap();
 
-        let settings_fit = get_activity_fit(); // get_settings_fit();
-        let mut in_cursor = Cursor::new(settings_fit);
+        let mut in_cursor = Cursor::new(fit_data);
+        assert!(FitCrc::check_crc(&mut in_cursor, 0, fit_data.len() as u64)?);
+        in_cursor.seek(SeekFrom::Start(0));
 
         let mut reader = FitFileReader::new(&mut in_cursor);
         let header = reader.read_global_header()?;
@@ -336,7 +348,28 @@ mod tests {
                 FitRecord::EndOfFile(_) => { break; },
             }
         }
+        Ok(())
+    }
 
-        panic!("ASD");
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
+    #[test]
+    fn test_dump_settings() -> Result<(), std::io::Error> {
+        init();
+        dump_file(&get_settings_fit() )
+    }
+
+    #[test]
+    fn test_dump_activity() -> Result<(), std::io::Error> {
+        init();
+        dump_file(&get_activity_fit() )
+    }
+
+    #[test]
+    fn test_dump_developer_data() -> Result<(), std::io::Error> {
+        init();
+        dump_file(&get_developer_data_fit() )
     }
 }

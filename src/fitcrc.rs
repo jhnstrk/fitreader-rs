@@ -1,6 +1,7 @@
 
 extern crate base64;
 
+use byteorder::{LittleEndian, ReadBytesExt};
 use std::io::{Read, Seek};
 
 #[derive(Copy, Clone, Default)]
@@ -9,21 +10,56 @@ pub struct FitCrc{
     crc: u16,
 }
 
-impl FitCrc{
+impl FitCrc {
     pub fn new() -> FitCrc
     {
-        return FitCrc{ crc:0,};
+        return FitCrc { crc: 0, };
     }
 
     pub fn consume(&mut self, byte_array: &[u8]) {
         self.crc = fit_crc_16(self.crc, byte_array);
     }
 
-    pub fn digest(&self) -> u16 {self.crc}
+    pub fn digest(&self) -> u16 { self.crc }
 
     pub fn reset(&mut self) { self.crc = 0; }
-}
 
+    pub fn compute_crc<T: Read + Seek>(file: &mut T, from:u64, count:u64) -> Result<u16, std::io::Error>
+    {
+        file.seek(std::io::SeekFrom::Start(from))?;
+
+        let mut buff = [0; 1024];
+        let mut context = FitCrc::new();
+        let mut remain = count;
+        while remain != 0 {
+            let to_read = std::cmp::min(buff.len(), count as usize);
+            let n = match file.read(&mut buff[0..to_read]) {
+                Ok(x) => {x},
+                Err(e) => { return Err(e);},
+            };
+            if n == 0 {
+                break;
+            }
+            context.consume(&buff[0..n]);
+            remain = remain - (n as u64);
+        }
+        return Ok(context.digest());
+    }
+
+    pub fn read_crc<T: Read + Seek>(file: &mut T, offset:u64) -> Result<u16, std::io::Error>
+    {
+        file.seek(std::io::SeekFrom::Start(offset))?;
+        let crc = file.read_u16::<LittleEndian>()?;
+        return Ok(crc);
+    }
+
+    pub fn check_crc<T: Read + Seek>(file: &mut T, from:u64, count:u64) -> Result<bool, std::io::Error>
+    {
+        let crc_read = Self::read_crc(file, from + count - 2)?;
+        let crc_computed = Self::compute_crc(file, from, count - 2)?;
+        return Ok (crc_read == crc_computed);
+    }
+}
 pub fn compute(data: &[u8]) -> u16 {
     let mut context = FitCrc::new();
     context.consume(data);
@@ -74,9 +110,11 @@ fn fit_crc_16(mut crc: u16, byte_array: &[u8]) -> u16 {
 mod tests {
     // Note this useful idiom: importing names from outer (for mod tests) scope.
     use super::*;
+    use std::io::Cursor;
 
     #[test]
-    fn test_crc() {
+    fn test_crc() -> Result< (), std::io::Error>
+    {
         let ba : [u8; 0] = [];
         assert_eq!(1234_u16, fit_crc_16(1234, &ba));
 
@@ -95,10 +133,15 @@ mod tests {
         let mut settings_fit = base64::decode(
             "DBBHAEQAAAAuRklUQAABAAAEAQKEAgKEAwSMAAEAAAABA9wAAeJAA\
                    kAAAQADBQQChAEBAAIBAgMBAgUBAAADhAEcvgBAAAEABAEBAosAAGQ5UA==").unwrap();
+
+        let mut in_cursor = Cursor::new(&settings_fit);
+        assert!(FitCrc::check_crc(&mut in_cursor, 0, settings_fit.len() as u64)?);
+
         let crc1 = settings_fit.pop().unwrap();
         let crc2 = settings_fit.pop().unwrap();
         let settings_crc = (crc2 as u16) | ((crc1 as u16) << 8);
         println!("Length: {} crc: {:x}", settings_fit.len(), settings_crc);
         assert_eq!(settings_crc, compute(&settings_fit[..]));
+        Ok(())
     }
 }

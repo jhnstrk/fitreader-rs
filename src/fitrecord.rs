@@ -12,7 +12,6 @@ use crate::fitdatamesg;
 use crate::fitdefnmesg;
 
 use byteorder::{LittleEndian, WriteBytesExt};
-use chrono::offset::TimeZone;
 
 fn convert_timestamp(x: Value) -> Value {
     match &x {
@@ -75,10 +74,10 @@ fn handle_fit_scale_offset( x: Value, scale: &Option<f64>, offset: &Option<f64> 
             if let Some(field_value) = v.as_f64() {
                 let mut value_copy = field_value;
                 if let Some(offset_f) = offset {
-                    value_copy = value_copy - offset_f;
+                    value_copy = value_copy - *offset_f;
                 }
                 if let Some(scale_f) = scale {
-                    value_copy = value_copy / scale_f;
+                    value_copy = value_copy / *scale_f;
                 }
 
                 Value::from(value_copy)
@@ -98,7 +97,7 @@ fn handle_fit_scale_offset( x: Value, scale: &Option<f64>, offset: &Option<f64> 
 }
 
 fn handle_fit_units( x: Value, units: &str )-> Value {
-    if (units == "semicircles") {
+    if units == "semicircles" {
         handle_fit_scale_offset(x, &Some(1.0e7), &None)
     } else {
         x
@@ -127,6 +126,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
             map.insert("profile_version".to_string(), Value::from(header.profile_version));
             ("Header".to_string(), Value::Object(map))},
         FitRecord::DataRecord(data_message) => {
+            let short_form = true;
             let mut map = Map::new();
             if !data_message.timestamp.is_none() {
                 let value = data_message.timestamp.unwrap();
@@ -136,6 +136,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
             }
             let message = pf.get_message(data_message.global_message_number);
             let mut field_vec: Vec<Value> = vec!();
+            let mut fields = Map::new();
             for ifield in &data_message.fields {
                 let field_name: String;
                 let mut field_units = None;
@@ -182,15 +183,71 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 }
                 value = handle_fit_scale_offset(value,  &field_scale, &field_offset );
 
-                let mut field_map = Map::new();
-                field_map.insert("name".to_string(), Value::from(field_name));
-                if let Some(field_units_str) = field_units {
-                    value = handle_fit_units( value, &field_units_str );
-                    field_map.insert("units".to_string(), Value::from(field_units_str));
+                if let Some(field_units_str) = &field_units {
+                    value = handle_fit_units(value, field_units_str);
                 }
-                field_map.insert("value".to_string(), value);
+                if short_form {
+                    fields.insert(field_name, value);
+                } else {
+                    let mut field_map = Map::new();
+                    field_map.insert("name".to_string(), Value::from(field_name));
+                    if let Some(field_units_str) = field_units {
+                        field_map.insert("units".to_string(), Value::from(field_units_str));
+                    }
+                    field_map.insert("value".to_string(), value);
 
-                field_vec.push(Value::from(field_map));
+                    field_vec.push(Value::from(field_map));
+                }
+            }
+            if data_message.dev_fields.is_empty() {
+                println!("No dev fields");
+            }
+            for ifield in &data_message.dev_fields {
+                println!("Dev field");
+                let field_name = ifield.description.field_name.clone();
+                let field_units = ifield.description.units.clone();
+                let field_type = ifield.description.base_type;
+                let field_scale = ifield.description.scale;
+                let field_offset = ifield.description.offset;
+
+                let mut value =
+                    match &ifield.data {
+                        FitFieldData::FitEnum(x)  => handle_fit_value(x),
+                        FitFieldData::FitSint8(x) => handle_fit_value(x),
+                        FitFieldData::FitUint8(x) => handle_fit_value(x),
+                        FitFieldData::FitSint16(x) => handle_fit_value(x),
+                        FitFieldData::FitUint16(x) => handle_fit_value(x),
+                        FitFieldData::FitSint32(x) => handle_fit_value(x),
+                        FitFieldData::FitUint32(x) => handle_fit_value(x),
+                        FitFieldData::FitString(x, _) => Value::from(x.as_str()),
+                        FitFieldData::FitF32(x) => handle_fit_value(x),
+                        FitFieldData::FitF64(x) => handle_fit_value(x),
+                        FitFieldData::FitU8z(x) => handle_fit_value(x),
+                        FitFieldData::FitU16z(x) => handle_fit_value(x),
+                        FitFieldData::FitU32z(x) => handle_fit_value(x),
+                        FitFieldData::FitByte(x) => handle_fit_value(x),
+                        FitFieldData::FitSInt64(x) => handle_fit_value(x),
+                        FitFieldData::FitUint64(x) => handle_fit_value(x),
+                        FitFieldData::FitUint64z(x) => handle_fit_value(x),
+                    };
+
+                value = handle_fit_scale_offset(value,  &field_scale, &field_offset );
+
+                if let Some(field_units_str) = &field_units {
+                    value = handle_fit_units(value, field_units_str);
+                }
+                if short_form {
+                    fields.insert(field_name, value);
+                } else {
+                    let mut field_map = Map::new();
+                    field_map.insert("name".to_string(), Value::from(field_name));
+                    if let Some(field_units_str) = field_units {
+                        field_map.insert("units".to_string(), Value::from(field_units_str));
+                    }
+                    field_map.insert("value".to_string(), value);
+
+                    field_vec.push(Value::from(field_map));
+                }
             }
             let message_name = if message.is_some() {
                 message.unwrap().message_name.clone()
@@ -198,7 +255,11 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 format!("Message_{}", data_message.global_message_number)
             };
             map.insert("message".to_string(), Value::from(message_name));
-            map.insert( "fields".to_string(), Value::Array(field_vec));
+            if short_form {
+                map.insert("fields".to_string(), Value::from(fields));
+            } else {
+                map.insert("fields".to_string(), Value::Array(field_vec));
+            }
             return ("data".to_string(), Value::Object(map));
         },
         FitRecord::DefinitionMessage(defn_message) => {
@@ -233,7 +294,23 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 field_map.insert("size".to_string(), Value::from(ifield.size_in_bytes));
                 field_vec.push(Value::from(field_map));
             }
+            let mut dev_field_vec: Vec<Value> = vec!();
+            for ifield in &defn_message.dev_field_defns {
+                let field_name: String;
+                {
+                    let field_string = format!("DeveloperField_{}", ifield.field_defn_num);
+                    field_name = field_string;
+                }
+                let mut field_map = Map::new();
+                field_map.insert("name".to_string(), Value::from(field_name));
+                field_map.insert("size".to_string(), Value::from(ifield.size_in_bytes));
+                field_map.insert("developer_data_index".to_string(), Value::from(ifield.dev_data_index));
+                dev_field_vec.push(Value::from(field_map));
+            }
             map.insert("field_defns".to_string(), Value::from(field_vec));
+            if dev_field_vec.len() > 0 {
+                map.insert("dev_field_defns".to_string(), Value::from(dev_field_vec));
+            }
             return ("definition".to_string(), Value::Object(map));
         }
         FitRecord::EndOfFile(crc) => {
@@ -255,8 +332,13 @@ pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< F
     let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
 
     if reserve_bit {
-        return Err(std::io::Error::new(std::io::ErrorKind::Other, "Reserved bit is set."))
+        if context.checks.reserved_bits_zero {
+            return Err(std::io::Error::new(std::io::ErrorKind::Other, "Reserved bit is set."));
+        } else {
+            warn!("Reserved bit is set in header. Byte=0x{:x}",record_hdr);
+        }
     }
+    debug!("Header: Byte=0x{:x} at Offset=0x{:x}",record_hdr, context.data_bytes_read - 1 + 14);
 
     if is_normal_header {
         let local_message_type = record_hdr & 0x0F;

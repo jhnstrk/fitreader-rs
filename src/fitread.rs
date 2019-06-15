@@ -162,9 +162,14 @@ pub fn fit_read_string(context: &mut FitFileContext, reader: &mut Read, width: &
         buf.push(byte);
     }
 
+    // Drop trailing null(s)
+    while (!buf.is_empty()) && (*buf.last().unwrap() == 0) {
+        buf.pop();
+    }
+
     let the_string = String::from_utf8_lossy(&buf);
 
-    context.data_bytes_read = context.data_bytes_read + buf.len() as u32;
+    context.data_bytes_read = context.data_bytes_read + len as u32;
     context.crc.consume(& buf);
     return Ok(the_string.to_string());
 }
