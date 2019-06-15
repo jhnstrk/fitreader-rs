@@ -27,7 +27,7 @@ fn convert_timestamp(x: Value) -> Value {
         Value::Array(xa) => {
             let mut ret = Vec::new();
             for v in xa {
-                ret.push(convert_timestamp(x.clone()));
+                ret.push(convert_timestamp(v.clone()));
             }
             Value::from(ret)
         },
@@ -117,6 +117,27 @@ fn handle_fit_value<T: Clone>(x: &Vec<T>) -> Value
     }
 }
 
+fn field_to_value(field_data: &FitFieldData) -> Value {
+    match field_data {
+        FitFieldData::FitEnum(x)  => handle_fit_value(x),
+        FitFieldData::FitSint8(x) => handle_fit_value(x),
+        FitFieldData::FitUint8(x) => handle_fit_value(x),
+        FitFieldData::FitSint16(x) => handle_fit_value(x),
+        FitFieldData::FitUint16(x) => handle_fit_value(x),
+        FitFieldData::FitSint32(x) => handle_fit_value(x),
+        FitFieldData::FitUint32(x) => handle_fit_value(x),
+        FitFieldData::FitString(x, _) => Value::from(x.as_str()),
+        FitFieldData::FitF32(x) => handle_fit_value(x),
+        FitFieldData::FitF64(x) => handle_fit_value(x),
+        FitFieldData::FitU8z(x) => handle_fit_value(x),
+        FitFieldData::FitU16z(x) => handle_fit_value(x),
+        FitFieldData::FitU32z(x) => handle_fit_value(x),
+        FitFieldData::FitByte(x) => handle_fit_value(x),
+        FitFieldData::FitSInt64(x) => handle_fit_value(x),
+        FitFieldData::FitUint64(x) => handle_fit_value(x),
+        FitFieldData::FitUint64z(x) => handle_fit_value(x),
+    }
+}
 fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
     match rec {
         FitRecord::HeaderRecord(header) => {
@@ -157,26 +178,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                     let field_string = format!("Field_{}", ifield.field_defn_num);
                     field_name = field_string;
                 }
-                let mut value =
-                    match &ifield.data {
-                        FitFieldData::FitEnum(x)  => handle_fit_value(x),
-                        FitFieldData::FitSint8(x) => handle_fit_value(x),
-                        FitFieldData::FitUint8(x) => handle_fit_value(x),
-                        FitFieldData::FitSint16(x) => handle_fit_value(x),
-                        FitFieldData::FitUint16(x) => handle_fit_value(x),
-                        FitFieldData::FitSint32(x) => handle_fit_value(x),
-                        FitFieldData::FitUint32(x) => handle_fit_value(x),
-                        FitFieldData::FitString(x, _) => Value::from(x.as_str()),
-                        FitFieldData::FitF32(x) => handle_fit_value(x),
-                        FitFieldData::FitF64(x) => handle_fit_value(x),
-                        FitFieldData::FitU8z(x) => handle_fit_value(x),
-                        FitFieldData::FitU16z(x) => handle_fit_value(x),
-                        FitFieldData::FitU32z(x) => handle_fit_value(x),
-                        FitFieldData::FitByte(x) => handle_fit_value(x),
-                        FitFieldData::FitSInt64(x) => handle_fit_value(x),
-                        FitFieldData::FitUint64(x) => handle_fit_value(x),
-                        FitFieldData::FitUint64z(x) => handle_fit_value(x),
-                    };
+                let mut value = field_to_value( &ifield.data );
 
                 if let Some(ft) = field_type {
                     value = handle_fit_enum_value(value, &ft, pf)
@@ -203,33 +205,23 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 println!("No dev fields");
             }
             for ifield in &data_message.dev_fields {
-                println!("Dev field");
-                let field_name = ifield.description.field_name.clone();
-                let field_units = ifield.description.units.clone();
-                let field_type = ifield.description.base_type;
-                let field_scale = ifield.description.scale;
-                let field_offset = ifield.description.offset;
+                let field_name;
+                let field_units;
+                let field_scale;
+                let field_offset;
+                if let Some(desc) = &ifield.description {
+                    field_name = desc.field_name.clone();
+                    field_units = desc.units.clone();
+                    field_scale = desc.scale;
+                    field_offset = desc.offset;
+                } else {
+                    field_name = format!("unknown_developer_field_{}",ifield.field_defn_num);
+                    field_units = None;
+                    field_scale = None;
+                    field_offset = None;
+                }
 
-                let mut value =
-                    match &ifield.data {
-                        FitFieldData::FitEnum(x)  => handle_fit_value(x),
-                        FitFieldData::FitSint8(x) => handle_fit_value(x),
-                        FitFieldData::FitUint8(x) => handle_fit_value(x),
-                        FitFieldData::FitSint16(x) => handle_fit_value(x),
-                        FitFieldData::FitUint16(x) => handle_fit_value(x),
-                        FitFieldData::FitSint32(x) => handle_fit_value(x),
-                        FitFieldData::FitUint32(x) => handle_fit_value(x),
-                        FitFieldData::FitString(x, _) => Value::from(x.as_str()),
-                        FitFieldData::FitF32(x) => handle_fit_value(x),
-                        FitFieldData::FitF64(x) => handle_fit_value(x),
-                        FitFieldData::FitU8z(x) => handle_fit_value(x),
-                        FitFieldData::FitU16z(x) => handle_fit_value(x),
-                        FitFieldData::FitU32z(x) => handle_fit_value(x),
-                        FitFieldData::FitByte(x) => handle_fit_value(x),
-                        FitFieldData::FitSInt64(x) => handle_fit_value(x),
-                        FitFieldData::FitUint64(x) => handle_fit_value(x),
-                        FitFieldData::FitUint64z(x) => handle_fit_value(x),
-                    };
+                let mut value  = field_to_value( &ifield.data );
 
                 value = handle_fit_scale_offset(value,  &field_scale, &field_offset );
 

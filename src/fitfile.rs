@@ -330,7 +330,7 @@ mod tests {
 
         let mut in_cursor = Cursor::new(fit_data);
         assert!(FitCrc::check_crc(&mut in_cursor, 0, fit_data.len() as u64)?);
-        in_cursor.seek(SeekFrom::Start(0));
+        in_cursor.seek(SeekFrom::Start(0))?;
 
         let mut reader = FitFileReader::new(&mut in_cursor);
         let header = reader.read_global_header()?;

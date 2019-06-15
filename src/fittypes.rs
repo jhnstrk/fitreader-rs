@@ -353,7 +353,7 @@ pub struct FitDataField {
 pub struct FitDevDataField {
     pub field_defn_num: u8,
     pub data: FitFieldData,
-    pub description: Arc<FitDevDataDescription>,
+    pub description: Option< Arc<FitDevDataDescription> >,
 }
 
 #[derive(Debug,Default)]

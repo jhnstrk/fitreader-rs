@@ -80,21 +80,23 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
             let field_value = FitDevDataField {
                 field_defn_num: field.field_defn_num,
                 data: field_value_data,
-                description: desc.clone(),
+                description: Some( desc.clone() ),
             };
             mesg.dev_fields.push(field_value);
         } else {
             // Field description not found. Load as bytes.
-            println!("Unknown dev field index={} defn_num={}", field.dev_data_index, field.field_defn_num);
-            let defn_num = field.field_defn_num;
+            warn!("Unknown dev field index={} defn_num={}", field.dev_data_index, field.field_defn_num);
             let base_type = FitDataType::FitByte;
-            let data_size = 1_u8;
-            let count = data_size;
+            let count = field.size_in_bytes;
             let field_value_data = read_fit_field(context, reader,
                                                   base_type, count)?;
 
-            let desc = format!("developer_field_{}", defn_num);
-
+            let field_value = FitDevDataField {
+                field_defn_num: field.field_defn_num,
+                data: field_value_data,
+                description: None,
+            };
+            mesg.dev_fields.push(field_value);
         }
     }
 
