@@ -28,14 +28,13 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
         ..Default::default()
     };
 
+    context.architecture = Some(defn_mesg.architecture);
 
     for field in &defn_mesg.field_defns {
         let data_size = field.data_type.unwrap().data_size();
         let count:u8 = match data_size {
             0 => field.size_in_bytes,
             _ => field.size_in_bytes / data_size };
-
-        context.architecture = Some(defn_mesg.architecture);
 
         let field_value_data = read_fit_field(context, reader,
                                               field.data_type.unwrap(), count)?;
@@ -54,11 +53,8 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
 
     }
 
-    context.architecture = Some(defn_mesg.architecture);
-
     for field in &defn_mesg.dev_field_defns {
 
-        println!("Reading dev field {:?}", context.developer_field_definitions);
         let desc2 = match context.developer_field_definitions.get(
             &field.dev_data_index) {
             None => {None },
@@ -67,7 +63,6 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
 
         if let Some(desc) = desc2
         {
-            println!("Reading field");
             let base_type = desc.base_type.unwrap();
             let data_size = base_type.data_size();
             let count:u8 = match data_size {
@@ -238,6 +233,9 @@ pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mes
         }
     }
 
+    for field in &mesg.dev_fields {
+        write_fit_field(context, writer, &field.data)?;
+    }
     Ok( () )
 }
 
