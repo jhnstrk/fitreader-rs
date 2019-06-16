@@ -49,6 +49,8 @@ pub fn read_global_header(context: &mut FitFileContext, reader: &mut Read) -> st
         if (header.crc != 0) && (actual_crc != header.crc) {
             return Err(std::io::Error::new(std::io::ErrorKind::Other, "Header CRC is invalid"));
         }
+
+        debug!("Header CRC OK");
     }
 
     if header.header_size as u32 > context.data_bytes_read {

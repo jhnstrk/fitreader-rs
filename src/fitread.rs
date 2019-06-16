@@ -158,7 +158,7 @@ pub fn fit_read_string(context: &mut FitFileContext, reader: &mut Read, width: &
     let len = *width as usize;
     // Read bytes
     for _i in 0..len {
-        let byte = reader.read_u8()?;
+        let byte = fit_read_u8(context, reader)?;
         buf.push(byte);
     }
 
@@ -168,8 +168,5 @@ pub fn fit_read_string(context: &mut FitFileContext, reader: &mut Read, width: &
     }
 
     let the_string = String::from_utf8_lossy(&buf);
-
-    context.data_bytes_read = context.data_bytes_read + len as u32;
-    context.crc.consume(& buf);
     return Ok(the_string.to_string());
 }

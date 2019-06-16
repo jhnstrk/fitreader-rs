@@ -50,7 +50,13 @@ impl<R: Read> FitFileReader<R> {
         if self.data_size.is_some() && (self.context.data_bytes_read < self.data_size.unwrap()) {
             return read_record(&mut self.context, &mut self.source);
         } else {
-            return Ok(FitRecord::EndOfFile(self.source.read_u16::<LittleEndian>()?));
+            let file_crc = self.source.read_u16::<LittleEndian>()?;
+            let computed_crc = self.context.crc.digest();
+            if (file_crc == computed_crc) {
+                return Ok(FitRecord::EndOfFile(file_crc));
+            } else {
+                return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bad CRC"));
+            }
         }
 
     }
@@ -198,6 +204,7 @@ pub fn read_file(path: &str) -> std::io::Result<FitFile> {
     let crc_out = fitcrc::crc_for_file(writer.get_mut() )?;  // "inadvisable"
     writer.seek(std::io::SeekFrom::End(0) )?;
     writer.write_u16::<LittleEndian>(crc_out)?;
+    println!("Write CRC: 0x{:x}", crc_out);
     println!("Info: Read {:} records from {:} bytes", num_rec, context.data_bytes_read);
 
     // Read directly as we don't want the crc value included in the crc computation.

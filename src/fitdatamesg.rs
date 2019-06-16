@@ -114,8 +114,15 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
 
 fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessage )
 {
+    const DEV_DATA_INDEX: u8 = 0;
+    const FIELD_DEFN_NUM: u8 = 1;
+    const BASE_TYPE_ID: u8 = 2;
+    const NAME: u8 = 3;
     // ARRAY = 4,
     // 5	components
+    const SCALE: u8 = 6;
+    const OFFSET: u8 = 7;
+    const UNITS: u8 = 8;
     //9	bits
     //10	accumulate
     //13	fit_base_unit_id
@@ -124,11 +131,8 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
 
     let mut has_field_defn = false;
 
-    const DEV_DATA_INDEX: u8 = 0;
-
     let mut dev_data_desc: FitDevDataDescription = Default::default();
     for ifield in &mesg.fields {
-        println!("ifield {:?}",ifield);
         match ifield.field_defn_num {
             DEV_DATA_INDEX => { // dev_data_index
                 if let Ok(x) = u8::try_from(&ifield.data) {
@@ -137,8 +141,7 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
                     warn!("Bad type for dev_data_index");
                 }
             },
-            1 => { // field_defn_num
-                println!("field_defn_num");
+            FIELD_DEFN_NUM => { // field_defn_num
                 if let  Ok(x) = u8::try_from(&ifield.data) {
                     has_field_defn = true;
                     dev_data_desc.field_defn_num = x;
@@ -146,35 +149,35 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
                     warn!("Bad type for field_defn_num");
                 }
             },
-            2 => { // base_type_id
+            BASE_TYPE_ID => {
                 if  let Ok(x) = u8::try_from(&ifield.data) {
                     dev_data_desc.base_type = Some(FitDataType::from_type_id(x).unwrap());
                 } else {
                     warn!("Bad type for base_type");
                 }
             },
-            3 => { // name
+            NAME => { // name
                 if let Ok(x) = String::try_from(&ifield.data) {
                     dev_data_desc.field_name = x.clone();
                 } else {
                     warn!("Bad type for field_name");
                 }
             },
-            6 => { // Scale
+            SCALE => {
                 if let Ok(x) = f64::try_from(&ifield.data) {
                     dev_data_desc.scale = Some(x);
                 } else {
                     warn!("Bad type for scale");
                 }
             },
-            7 => { // Offset
+            OFFSET => {
                 if let Ok(x) = f64::try_from(&ifield.data) {
                     dev_data_desc.offset = Some(x);
                 } else {
                     warn!("Bad type for offset");
                 }
             },
-            8 => { // units
+            UNITS => {
                 if let Ok(x) = String::try_from(&ifield.data) {
                     dev_data_desc.units = Some(x.clone());
                 } else {
@@ -182,15 +185,15 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
                 }
             },
             _ => {
-                println!("Other value");
+                debug!("Not using developer desc:{}, {:?}", &ifield.field_defn_num, &ifield.data);
             }
         }
     }
     if has_field_defn {
-        println!("Adding defn num");
+        debug!("Inserting field defn: {} = {:?}", &dev_data_desc.field_defn_num, &dev_data_desc);
         context.developer_field_definitions.insert(dev_data_desc.field_defn_num, Arc::new(dev_data_desc));
     } else {
-        println!("Dev field has no defn num");
+        warn!("Developer field description has no field definition number");
     }
 }
 

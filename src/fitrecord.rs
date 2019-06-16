@@ -201,9 +201,7 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                     field_vec.push(Value::from(field_map));
                 }
             }
-            if data_message.dev_fields.is_empty() {
-                println!("No dev fields");
-            }
+
             for ifield in &data_message.dev_fields {
                 let field_name;
                 let field_units;
