@@ -10,7 +10,7 @@ use crate::fitfield::{read_fit_field, write_fit_field};
 use std::convert::TryFrom;
 use std::sync::Arc;
 
-pub fn read_data_message( context: &mut FitFileContext, reader: &mut Read,
+pub fn read_data_message( context: &mut FitFileContext, reader: &mut dyn Read,
                       local_message_type: u8, timestamp: Option<u32>) -> Result< FitDataMessage, std::io::Error> {
 
     debug!("Data message, local ID: {:} at byte {:}", local_message_type, context.data_bytes_read);
@@ -192,7 +192,7 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
     }
 }
 
-pub fn write_data_message( context: &mut FitFileContext, writer: &mut Write, mesg: &FitDataMessage)
+pub fn write_data_message( context: &mut FitFileContext, writer: &mut dyn Write, mesg: &FitDataMessage)
                        -> Result< (), std::io::Error>
 {
     let is_compressed = mesg.timestamp.is_some();

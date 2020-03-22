@@ -316,7 +316,7 @@ pub fn print_rec(rec: &FitRecord, pf: &ProfileData) {
     println!("{}: {}", name, value);
 }
 
-pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< FitRecord, std::io::Error> {
+pub fn read_record(context: &mut FitFileContext, reader: &mut dyn Read) -> Result< FitRecord, std::io::Error> {
     let record_hdr = fit_read_u8(context, reader)?;
     let is_normal_header = (record_hdr & 0x80) == 0;
     let reserve_bit = (record_hdr & 0x10) != 0;  // Bit 4 is reserved and should be zero.
@@ -360,7 +360,7 @@ pub fn read_record(context: &mut FitFileContext, reader: &mut Read) -> Result< F
     }
 }
 
-pub fn write_record(context: &mut FitFileContext, writer: &mut Write, rec: &FitRecord)
+pub fn write_record(context: &mut FitFileContext, writer: &mut dyn Write, rec: &FitRecord)
                     -> Result< (), std::io::Error>
 {
     match rec {

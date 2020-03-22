@@ -52,7 +52,7 @@ impl<R: Read> FitFileReader<R> {
         } else {
             let file_crc = self.source.read_u16::<LittleEndian>()?;
             let computed_crc = self.context.crc.digest();
-            if (file_crc == computed_crc) {
+            if file_crc == computed_crc {
                 return Ok(FitRecord::EndOfFile(file_crc));
             } else {
                 return Err(std::io::Error::new(std::io::ErrorKind::Other, "Bad CRC"));
@@ -113,7 +113,7 @@ pub fn read_file_filename(path: &str) -> std::io::Result<FitFile> {
     return read_file_read(&mut file);
 }
 
-pub fn read_file_read(source: &mut Read) -> std::io::Result<FitFile> {
+pub fn read_file_read(source: &mut dyn Read) -> std::io::Result<FitFile> {
     let mut my_file: FitFile = FitFile::new();
     let mut context: FitFileContext = Default::default();
 

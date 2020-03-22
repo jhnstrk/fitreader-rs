@@ -8,7 +8,7 @@ use crate::fitwrite::{fit_write_u8, fit_write_u16, fit_write_i8, fit_write_i16,
                       fit_write_i32, fit_write_u32, fit_write_string, fit_write_f32,
                       fit_write_f64, fit_write_u64, fit_write_i64};
 
-pub fn read_fit_field( context: &mut FitFileContext, reader: &mut Read,
+pub fn read_fit_field( context: &mut FitFileContext, reader: &mut dyn Read,
                    data_type: FitDataType, count: u8)
                    -> Result< FitFieldData, std::io::Error >
 {
@@ -133,7 +133,7 @@ pub fn read_fit_field( context: &mut FitFileContext, reader: &mut Read,
     }
 }
 
-pub fn write_fit_field(context: &mut FitFileContext, writer: &mut Write, field: &FitFieldData)
+pub fn write_fit_field(context: &mut FitFileContext, writer: &mut dyn Write, field: &FitFieldData)
                    -> Result< (), std::io::Error >
 {
     match field {
