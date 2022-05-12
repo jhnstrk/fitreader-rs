@@ -107,6 +107,9 @@
   "dive_alarm":262,
   "exercise_title":264,
   "dive_summary":268,
+  "jump":285,
+  "climb_pro":317,
+  "device_aux_battery_info":375,
   "mfg_range_min":65280,
   "mfg_range_max":65534
 }}, { "type_name":"checksum", "base_type": "uint8", "values":{
@@ -133,7 +136,8 @@
   "creator":0
 }}, { "type_name":"gender", "base_type": "enum", "values":{
   "female":0,
-  "male":1
+  "male":1,
+  "unspecified": 2
 }}, { "type_name":"language", "base_type": "enum", "values":{
   "english":0,
   "french":1,
@@ -432,6 +436,7 @@
   "jumpmaster":46,
   "boxing":47,
   "floor_climbing":48,
+  "diving": 53,
   "all":254
 }}, { "type_name":"sport_bits_0", "base_type": "uint8z", "values":{
   "generic":1,
@@ -550,6 +555,11 @@
   "apnea_hunting":57,
   "virtual_activity":58,
   "obstacle":59,
+  "breathing":62,
+  "sail_race":65,
+  "ultra":67,
+  "indoor_climbing":68,
+  "bouldering":69,
   "all":254
 }}, { "type_name":"sport_event", "base_type": "enum", "values":{
   "uncategorized":0,
@@ -568,7 +578,10 @@
   "active":0,
   "rest":1,
   "warmup":2,
-  "cooldown":3
+  "cooldown":3,
+  "recovery":4,
+  "interval":5,
+  "other":6
 }}, { "type_name":"session_trigger", "base_type": "enum", "values":{
   "activity_end":0,
   "manual":1,
@@ -3217,5 +3230,9 @@
 }}, { "type_name":"favero_product", "base_type": "uint16", "values":{
   "assioma_uno":10,
   "assioma_duo":12
+}}, { "type_name":"climb_pro_event", "base_type": "enum", "values":{
+  "approach":0,
+  "start":1,
+  "complete":2
 }}
 ]

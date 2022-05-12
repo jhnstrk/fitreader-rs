@@ -529,5 +529,14 @@
 { "mesg_num":259, "message_name": "dive_gas", "fields":[ ] },
 { "mesg_num":262, "message_name": "dive_alarm", "fields":[ ] },
 { "mesg_num":264, "message_name": "exercise_title", "fields":[ ] },
-{ "mesg_num":268, "message_name": "dive_summary", "fields":[ ] }
+{ "mesg_num":268, "message_name": "dive_summary", "fields":[ ] },
+{ "mesg_num":317, "message_name": "climb_pro", "fields":[
+  {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time","units":"s"},
+  {"field_defn_num":0, "field_name": "position_lat","field_type":"sint32"},
+  {"field_defn_num":1, "field_name": "position_long","field_type":"sint32"},
+  {"field_defn_num":2, "field_name": "climb_pro_event","field_type":"climb_pro_event"},
+  {"field_defn_num":3, "field_name": "climb_number","field_type":"uint16"},
+  {"field_defn_num":4, "field_name": "climb_category","field_type":"uint8"},
+  {"field_defn_num":5, "field_name": "current_dist","field_type":"float32"}
+] }
 ]
