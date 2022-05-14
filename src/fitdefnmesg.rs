@@ -108,6 +108,7 @@ pub fn read_definition_message( context: &mut FitFileContext, reader: &mut dyn R
         let number_of_dev_fields = fit_read_u8(context, reader)?;
         for _ifield in 0..number_of_dev_fields {
             defn_mesg.dev_field_defns.push( read_dev_field_defn(context, reader)? );
+            debug!("DevField {}: {:?}", _ifield, defn_mesg.field_defns.last().unwrap());
         }
     }
 

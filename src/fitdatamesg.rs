@@ -2,8 +2,7 @@
 // std imports
 use std::io::{Read, Write};
 
-use crate::fittypes::{FitDataType, FitFieldData, FitDataMessage, FitDataField, FitFileContext,
-                      FitDevDataDescription, FitDevDataField};
+use crate::fittypes::{FitDataType, FitFieldData, FitDataMessage, FitDataField, FitFileContext, FitDevDataDescription, FitDevDataField, FitFileDeveloperId, FitDeveloperFieldDefinition};
 use crate::fitwrite::{fit_write_u8};
 
 use crate::fitfield::{read_fit_field, write_fit_field};
@@ -55,11 +54,15 @@ pub fn read_data_message( context: &mut FitFileContext, reader: &mut dyn Read,
 
     for field in &defn_mesg.dev_field_defns {
 
-        let desc2 = match context.developer_field_definitions.get(
+        let mut desc2: Option<Arc<FitDevDataDescription>> = None;
+        if let Some(dev_data) = context.developer_ids.get(
             &field.dev_data_index) {
-            None => {None },
-            Some(x) => {Some(x.clone())},
-        };
+            desc2 = match dev_data.developer_field_definitions.get(
+                &field.field_defn_num) {
+                None => {None },
+                Some(x) => {Some(x.clone())},
+            };
+        }
 
         if let Some(desc) = desc2
         {
@@ -146,7 +149,9 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
             },
             BASE_TYPE_ID => {
                 if  let Ok(x) = u8::try_from(&ifield.data) {
-                    dev_data_desc.base_type = Some(FitDataType::from_type_id(x).unwrap());
+                    // Upper bit contains endianness
+                    let type_id = x & 0x7F;
+                    dev_data_desc.base_type = Some(FitDataType::from_type_id(type_id).unwrap());
                 } else {
                     warn!("Bad type for base_type");
                 }
@@ -186,7 +191,12 @@ fn add_dev_field_description( context: &mut FitFileContext, mesg: &FitDataMessag
     }
     if has_field_defn {
         debug!("Inserting field defn: {} = {:?}", &dev_data_desc.field_defn_num, &dev_data_desc);
-        context.developer_field_definitions.insert(dev_data_desc.field_defn_num, Arc::new(dev_data_desc));
+        if !context.developer_ids.contains_key(&dev_data_desc.dev_data_index) {
+            let mut developer_id: FitFileDeveloperId = Default::default();
+            context.developer_ids.insert(dev_data_desc.dev_data_index, developer_id);
+        }
+        let dev_id = context.developer_ids.get_mut(&dev_data_desc.dev_data_index).unwrap();
+        dev_id.developer_field_definitions.insert(dev_data_desc.field_defn_num,  Arc::new(dev_data_desc));
     } else {
         warn!("Developer field description has no field definition number");
     }

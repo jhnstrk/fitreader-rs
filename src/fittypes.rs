@@ -323,13 +323,24 @@ impl Default for Checks {
 
 #[derive(Default)]
 #[derive(Debug)]
+pub struct FitFileDeveloperId {
+    pub developer_id: Option< u8 >,
+    pub application_id: Option< u8 >,
+    pub manufacturer_id: Option< u16 >,  // manufacturer
+    pub developer_data_index: Option< u8 >,
+    pub application_version: Option< u32 >,
+    pub developer_field_definitions: HashMap<u8, Arc<FitDevDataDescription> >,
+}
+
+#[derive(Default)]
+#[derive(Debug)]
 pub struct FitFileContext {
     pub data_bytes_read: u32,
     pub data_bytes_written: u32,
     pub crc: FitCrc,
     pub architecture: Option<Endianness>,
     pub field_definitions: HashMap<u8, Arc<FitDefinitionMessage> >,
-    pub developer_field_definitions: HashMap<u8, Arc<FitDevDataDescription> >,
+    pub developer_ids: HashMap<u8, FitFileDeveloperId >,
     pub timestamp: u32,
     pub checks: Checks,
 }
