@@ -155,7 +155,7 @@ pub fn read_file(path: &str) -> std::io::Result<FitFile> {
 
     println!("Reading header from: {}", path);
     my_file.header = read_global_header(&mut context, &mut reader)?;
-
+    debug!("Read header: {:?}", my_file.header);
 
     let file_out = OpenOptions::new()
         .read(true)

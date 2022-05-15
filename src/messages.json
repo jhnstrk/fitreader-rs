@@ -73,12 +73,49 @@
   {"field_defn_num":3, "field_name": "hrm_ant_id_trans_type","field_type":"uint8z"}
 ] },
 { "mesg_num":5, "message_name": "sdm_profile", "fields":[ ] },
-{ "mesg_num":6, "message_name": "bike_profile", "fields":[ ] },
+{ "mesg_num":6, "message_name": "bike_profile", "fields":[
+  {"field_defn_num":254, "field_name": "message_index","field_type":"message_index"},
+  {"field_defn_num":0, "field_name": "name","field_type":"string"},
+  {"field_defn_num":1, "field_name": "sport","field_type":"sport"},
+  {"field_defn_num":2, "field_name": "sub_sport","field_type":"sub_sport"},
+  {"field_defn_num":3, "field_name": "odometer","field_type":"uint32","scale":100,"units":"m"},
+  {"field_defn_num":4, "field_name": "bike_spd_ant_id","field_type":"uint16z"},
+  {"field_defn_num":5, "field_name": "bike_cad_ant_id","field_type":"uint16z"},
+  {"field_defn_num":6, "field_name": "bike_spdcad_ant_id","field_type":"uint16z"},
+  {"field_defn_num":7, "field_name": "bike_power_ant_id","field_type":"uint16z"},
+  {"field_defn_num":8, "field_name": "custom_wheelsize","field_type":"uint16","scale":1000,"units":"m"},
+  {"field_defn_num":9, "field_name": "auto_wheelsize","field_type":"uint16","scale":1000,"units":"m"},
+  {"field_defn_num":10, "field_name": "bike_weight","field_type":"uint16","scale":10,"units":"kg"},
+  {"field_defn_num":11, "field_name": "power_cal_factor","field_type":"uint16","scale":10,"units":"%"},
+  {"field_defn_num":12, "field_name": "auto_wheel_cal","field_type":"bool"},
+  {"field_defn_num":13, "field_name": "auto_power_zero","field_type":"bool"},
+  {"field_defn_num":14, "field_name": "id","field_type":"uint8"},
+  {"field_defn_num":15, "field_name": "spd_enabled","field_type":"bool"},
+  {"field_defn_num":16, "field_name": "cad_enabled","field_type":"bool"},
+  {"field_defn_num":17, "field_name": "spdcad_enabled","field_type":"bool"},
+  {"field_defn_num":18, "field_name": "power_enabled","field_type":"bool"},
+  {"field_defn_num":19, "field_name": "crank_length","field_type":"uint8","scale":2,"offset":-110,"units":"mm"},
+  {"field_defn_num":20, "field_name": "enabled","field_type":"bool"},
+  {"field_defn_num":21, "field_name": "bike_spd_ant_id_trans_type","field_type":"uint8z"},
+  {"field_defn_num":22, "field_name": "bike_cad_ant_id_trans_type","field_type":"uint8z"},
+  {"field_defn_num":23, "field_name": "bike_spdcad_ant_id_trans_type","field_type":"uint8z"},
+  {"field_defn_num":24, "field_name": "bike_power_ant_id_trans_type","field_type":"uint8z"},
+  {"field_defn_num":37, "field_name": "odometer_rollover","field_type":"uint8"},
+  {"field_defn_num":38, "field_name": "front_gear_num","field_type":"uint8z"},
+  {"field_defn_num":39, "field_name": "front_gear","field_type":"uint8z","array":true},
+  {"field_defn_num":40, "field_name": "rear_gear_num","field_type":"uint8z"},
+  {"field_defn_num":41, "field_name": "rear_gear","field_type":"uint8z","array":true},
+  {"field_defn_num":44, "field_name": "shimano_di2_enabled","field_type":"bool"}
+] },
 { "mesg_num":7, "message_name": "zones_target", "fields":[ ] },
 { "mesg_num":8, "message_name": "hr_zone", "fields":[ ] },
 { "mesg_num":9, "message_name": "power_zone", "fields":[ ] },
 { "mesg_num":10, "message_name": "met_zone", "fields":[ ] },
-{ "mesg_num":12, "message_name": "sport", "fields":[ ] },
+{ "mesg_num":12, "message_name": "sport", "fields":[
+  {"field_defn_num":0, "field_name": "sport","field_type":"sport"},
+  {"field_defn_num":1, "field_name": "sub_sport","field_type":"sub_sport"},
+  {"field_defn_num":3, "field_name": "name","field_type":"string"}
+] },
 { "mesg_num":15, "message_name": "goal", "fields":[ ] },
 { "mesg_num":18, "message_name": "session", "fields":[
   {"field_defn_num":254, "field_name": "message_index","field_type":"message_index"},
@@ -403,7 +440,6 @@
   {"field_defn_num":13, "field_name": "device_index","field_type":"device_index"}
 ]
 },
-{ "mesg_num":22, "message_name": "source", "fields":[]},
 { "mesg_num":23, "message_name": "device_info", "fields":[
   {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time","units":"s"},
   {"field_defn_num":0, "field_name": "device_index","field_type":"device_index"},
@@ -558,7 +594,6 @@
   {"field_defn_num":4, "field_name": "cycles_to_calories","field_type":"uint16","scale":5000,"units":"kcal/cycle"},
   {"field_defn_num":5, "field_name": "resting_metabolic_rate","field_type":"uint16","units":"kcal / day"}
 ] },
-{ "mesg_num":104, "message_name": "battery", "fields":[ ] },
 { "mesg_num":105, "message_name": "pad", "fields":[ ] },
 { "mesg_num":106, "message_name": "slave_device", "fields":[ ] },
 { "mesg_num":127, "message_name": "connectivity", "fields":[ ] },

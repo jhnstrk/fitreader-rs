@@ -34,23 +34,48 @@ pub struct ProfileData {
     type_map: HashMap<String, ProfileType>,
 }
 
-pub fn build_profile() -> Result<ProfileData, String> {
+fn merge_message(message: &mut ProfileMessage, supplement: &ProfileMessage) {
+    for sup_field in &supplement.fields {
+        if let Some(index_field) = message.fields.iter().position(
+            |x| x.field_defn_num == sup_field.field_defn_num)
+        {
+            debug!("Overwriting default profile for field {} of message {}",
+                sup_field.field_defn_num, message.mesg_num);
+            message.fields[index_field].clone_from(sup_field);
+        } else {
+            debug!("Adding field {} to message {}", sup_field.field_defn_num, message.mesg_num);
+            message.fields.push(sup_field.clone());
+        }
+    }
+}
 
-    let json_messages = include_bytes!("messages.json");
-    let json_types = include_bytes!("types.json");
-
+fn append_profile(message_map: &mut HashMap<u16, ProfileMessage>, json_messages: &[u8])  -> Result<(), String> {
     // Parse the string of data into serde_json::Value.
     let vec_from_json: Vec<ProfileMessage> = match serde_json::from_slice(json_messages){
         Ok(v) => {v},
         Err(e) => {return Err(e.to_string());},
-    };
+    }
+        ;
+    for message in &vec_from_json {
+        if let Some(msg) = message_map.get_mut(&message.mesg_num) {
+            merge_message(msg, message);
+        } else {
+            message_map.insert(message.mesg_num, message.clone());
+        }
+    }
+    Ok(())
+}
+
+pub fn build_profile() -> Result<ProfileData, String> {
+    let json_messages = include_bytes!("messages.json");
+    let custom_messages = include_bytes!("undocumented_messages.json");
 
     let mut message_map: HashMap<u16, ProfileMessage> = HashMap::new();
 
-    for message in &vec_from_json {
-        message_map.insert(message.mesg_num, message.clone());
-    }
+    append_profile(&mut message_map, json_messages).unwrap();
+    append_profile(&mut message_map, custom_messages).unwrap() ;
 
+    let json_types = include_bytes!("types.json");
     let type_vec: Vec<ProfileType> = match serde_json::from_slice(json_types){
         Ok(x) => {x},
         Err(e) => {return Err(e.to_string());},

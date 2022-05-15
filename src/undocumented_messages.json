@@ -1,0 +1,26 @@
+[
+  { "mesg_num":22, "message_name": "undocumented_garmin_source", "fields":[
+    {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time"}
+  ] },
+  { "mesg_num":79, "message_name": "undocumented_garmin_79", "fields":[
+    {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time"},
+    {"field_defn_num":1, "field_name": "default_min_hr","field_type":"uint8", "units":"bpm"},
+    {"field_defn_num":2, "field_name": "default_max_hr","field_type":"uint8", "units":"bpm"},
+    {"field_defn_num":5, "field_name": "user_set_min_hr","field_type":"uint8", "units":"bpm"},
+    {"field_defn_num":6, "field_name": "user_set_max_hr","field_type":"uint8", "units":"bpm"}
+  ] },
+  { "mesg_num":104, "message_name": "undocumented_garmin_battery", "fields":[
+    {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time"}
+  ] },
+  { "mesg_num":113, "message_name": "undocumented_garmin_113", "fields":[
+    {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time"}
+  ] },
+  { "mesg_num":140, "message_name": "undocumented_garmin_firstbeat_metrics", "fields":[
+    {"field_defn_num":253, "field_name": "timestamp","field_type":"date_time"},
+    {"field_defn_num":1, "field_name": "new_hr_max","field_type":"uint8", "units":"bpm"},
+    {"field_defn_num":4, "field_name": "aerobic_load","field_type":"uint8"},
+    {"field_defn_num":5, "field_name": "undocumented_5","field_type":"f32"},
+    {"field_defn_num":6, "field_name": "undocumented_6","field_type":"f32"},
+    {"field_defn_num":7, "field_name": "metmax","field_type":"f32"}
+  ] }
+]
