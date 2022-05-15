@@ -276,6 +276,8 @@ fn to_json(rec: &FitRecord, pf: &ProfileData) -> (String, Value){
                 if field_desc.is_some() {
                     field_name = field_desc.unwrap().field_name.clone();
                 } else {
+                    warn!("Unknown field definition {} in global message {}",
+                        ifield.field_defn_num, defn_message.global_message_number);
                     let field_string = format!("Field_{}", ifield.field_defn_num);
                     field_name = field_string;
                 }

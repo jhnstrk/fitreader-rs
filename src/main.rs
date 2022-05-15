@@ -10,20 +10,28 @@ use crate::fit_reader::fitfile;
 extern crate env_logger;
 
 fn main() {
+    env_logger::init();
+
     let args: Vec<String> = env::args().collect();
 
     if args.len() <= 1 {
-        warn!("Usage: fit_file input_file.fit");
-        return;
+        println!("Usage: fit_file input_file.fit");
+        std::process::exit(1);
     }
 
-    env_logger::init();
+    for pathname in &args[1..] {
+        info!("Processing {}", pathname);
+        let res = fitfile::read_file(&pathname);
 
-    let res = fitfile::read_file(args.get(1).unwrap());
+        match res {
+            Ok(_) => {},
+            Err(e) => {
+                error!("Error: {:?}", e);
+                std::process::exit(1);
+            },
+        };
+    }
 
-    match res {
-        Ok(_) => {},
-        Err(e) => warn!("Error: {:?}", e),
-    };
     info!("Done");
+    std::process::exit(0);
 }
