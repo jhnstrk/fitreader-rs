@@ -46,7 +46,7 @@ pub fn check_rec(context: &FitFileContext, rec: &FitRecord)
 {
     let now = Utc::now();
     let base_datetime = Utc.ymd(1989, 12, 31).and_hms(0, 0, 0);
-    let earliest_datetime = Utc.ymd(2018, 1, 1).and_hms(0, 0, 0);
+    let earliest_datetime = Utc.ymd(2010, 1, 1).and_hms(0, 0, 0);
     let latest_datetime = now.checked_add_signed(chrono::Duration::weeks(1) ).unwrap();
 
     //now.checked_sub_signed(Duration::years(2) );
